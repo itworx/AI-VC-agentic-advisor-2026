@@ -1,0 +1,68 @@
+{
+  "note": "Real companies, chosen because they have substantial public information so interns can check whether the agent is correct. `expected_screening` refers only to fit against the fictional Nile Ventures thesis - it is not a judgement about the company. Verify stage and sector at run time; these change, and a stale expectation is the intern's problem to notice.",
+  "companies": [
+    {
+      "name": "Paymob",
+      "website": "https://paymob.com",
+      "why_chosen": "Egyptian fintech infrastructure. Well documented publicly.",
+      "expected_screening": "pass - B2B fintech infrastructure, MENA",
+      "note": "Check current stage. May now be past the thesis stage ceiling."
+    },
+    {
+      "name": "Instabug",
+      "website": "https://instabug.com",
+      "why_chosen": "Egyptian developer tools company with a clear public product story.",
+      "expected_screening": "pass - developer tools, B2B, MENA"
+    },
+    {
+      "name": "Supabase",
+      "website": "https://supabase.com",
+      "why_chosen": "Data infrastructure with very rich public documentation and pricing.",
+      "expected_screening": "pass on sector, likely reject on stage - verify"
+    },
+    {
+      "name": "dbt Labs",
+      "website": "https://www.getdbt.com",
+      "why_chosen": "Data infrastructure, extremely well documented, clear pricing tiers.",
+      "expected_screening": "reject - past Series B"
+    },
+    {
+      "name": "Hugging Face",
+      "website": "https://huggingface.co",
+      "why_chosen": "Developer tools, huge public footprint. Good test of a company whose business model is harder to read from the website than its product is.",
+      "expected_screening": "reject - stage"
+    },
+    {
+      "name": "Vezeeta",
+      "website": "https://www.vezeeta.com",
+      "why_chosen": "MENA healthtech. Tests the boundary between vertical SaaS and consumer marketplace - the agent must reason, not pattern-match.",
+      "expected_screening": "ambiguous - the interesting case. Either answer is acceptable if the reason is sound"
+    },
+    {
+      "name": "Swvl",
+      "website": "https://www.swvl.com",
+      "why_chosen": "MENA, but consumer transport. Publicly listed, so plenty of filings.",
+      "expected_screening": "reject - consumer, and past stage"
+    },
+    {
+      "name": "Figma",
+      "website": "https://www.figma.com",
+      "why_chosen": "Clear reject on stage, but a very strong company. Tests that the agent rejects on thesis fit rather than on quality.",
+      "expected_screening": "reject - stage. Must not pass just because the company is good"
+    }
+  ],
+  "designed_edge_cases": [
+    {
+      "name": "Hardware reject case",
+      "instruction": "Pick any robotics or hardware company with a public website. Expected: rejected at screening on the hardware exclusion, in one cheap call, with no specialist research triggered.",
+      "tests": "Does the screening gate actually save money, or does the supervisor run research anyway?"
+    },
+    {
+      "name": "Thin information case",
+      "instruction": "Create a single-page static site for a fictional company - a name, one sentence, a contact form, nothing else. Host it locally or on GitHub Pages. Do NOT use a real small company for this test.",
+      "expected": "The agent returns mostly 'not found' entries and a memo that says the information is insufficient. It must NOT infer a market size, a customer count, or a team size.",
+      "tests": "The single most important behaviour in this project: refusing to guess.",
+      "why_fictional": "Using a real obscure company would mean generating unverified claims about a real business with no public record to check them against. Build the test case instead."
+    }
+  ]
+}
