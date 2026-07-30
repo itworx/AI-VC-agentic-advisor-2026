@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -13,13 +15,16 @@ from backend.services.edgar_service import (
     format_submissions_as_text,
     lookup_cik_by_name,
 )
+from backend.utils.cost_logger import log_cost
+from backend.utils.token_cost import estimate_cost
 
+NODE_NAME = "team_signals"
 TEAM_SIGNALS_CATEGORIES = ["team_size", "founding_year", "funding_stage", "public_statements"]
 MAX_PAGES_FOR_EXTRACTION = 15
 MIN_SNIPPET_FALLBACK_LENGTH = 100
 
 model = ChatGoogleGenerativeAI(model="gemini-3.6-flash")
-structured_model = model.with_structured_output(SpecialistOutput)
+structured_model = model.with_structured_output(SpecialistOutput, include_raw=True)
 search_tool = TavilySearch(max_results=5)
 
 
@@ -173,6 +178,42 @@ def build_edgar_page(company_name: str) -> dict | None:
     return {"url": url, "content": text}
 
 
+def _log_invocation_cost(raw_message) -> None:
+    usage = getattr(raw_message, "usage_metadata", None) if raw_message else None
+    if not usage:
+        return
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    log_cost(
+        node_name=NODE_NAME,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        estimated_cost=estimate_cost(input_tokens, output_tokens),
+    )
+
+
+def _invoke_extraction(prompt: str) -> Optional[SpecialistOutput]:
+    """Two attempts total. Logs cost on every attempt that reached the
+    model, even if this attempt's output failed to parse -- those tokens
+    were still spent."""
+    for attempt in (1, 2):
+        try:
+            response = structured_model.invoke(prompt)
+        except Exception as e:
+            print(f"[team_signals] extraction attempt {attempt} failed: {e}")
+            continue
+
+        _log_invocation_cost(response.get("raw"))
+
+        parsed = response.get("parsed")
+        if parsed is not None:
+            return parsed
+
+        print(f"[team_signals] attempt {attempt} failed to parse: {response.get('parsing_error')}")
+
+    return None
+
+
 def build_extraction_prompt(company_name: str, pages: list[dict]) -> str:
     page_blocks = "\n\n".join(
         f"URL: {p['url']}\nCONTENT:\n{p['content'][:6000]}"
@@ -245,15 +286,9 @@ def team_signals(company_name: str, company_website: str) -> SpecialistOutput:
 
     prompt = build_extraction_prompt(company_name, pages)
 
-    try:
-        result: SpecialistOutput = structured_model.invoke(prompt)
-    except Exception as e:
-        print(f"[team_signals] extraction failed: {e}")
-        try:
-            result = structured_model.invoke(prompt)
-        except Exception as e2:
-            print(f"[team_signals] retry failed: {e2}")
-            return SpecialistOutput(claims=[], not_found=TEAM_SIGNALS_CATEGORIES)
+    result = _invoke_extraction(prompt)
+    if result is None:
+        return SpecialistOutput(claims=[], not_found=TEAM_SIGNALS_CATEGORIES)
 
     for claim in result.claims:
         claim.specialist = "team_signals"
