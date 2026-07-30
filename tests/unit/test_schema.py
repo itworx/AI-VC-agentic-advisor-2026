@@ -1,5 +1,3 @@
-
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -11,9 +9,7 @@ from backend.models.categories import ALLOWED_CATEGORIES, REQUIRED_CATEGORIES
 from backend.models.claim import Claim, SpecialistOutput
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def _valid_claim_dict() -> dict:
@@ -29,9 +25,7 @@ def _valid_claim_dict() -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
 # C-03: A claim without a source URL is rejected.
-# ---------------------------------------------------------------------------
 
 
 def test_claim_without_source_url_is_rejected():
@@ -61,10 +55,7 @@ def test_claim_with_malformed_source_url_is_rejected():
         Claim(**data)
 
 
-# ---------------------------------------------------------------------------
 # Other required fields
-# ---------------------------------------------------------------------------
-
 
 def test_claim_missing_claim_text_is_rejected():
     data = _valid_claim_dict()
@@ -108,10 +99,7 @@ def test_claim_missing_category_is_rejected():
         Claim(**data)
 
 
-# ---------------------------------------------------------------------------
 # Field constraints
-# ---------------------------------------------------------------------------
-
 
 def test_quoted_snippet_over_25_words_is_rejected():
     data = _valid_claim_dict()
@@ -157,10 +145,7 @@ def test_all_allowed_categories_actually_validate():
         Claim(**data)
 
 
-# ---------------------------------------------------------------------------
 # Happy path
-# ---------------------------------------------------------------------------
-
 
 def test_fully_valid_claim_is_accepted():
     """A fully populated claim with valid fields passes validation."""
@@ -179,10 +164,7 @@ def test_retrieval_timestamp_auto_populates_when_omitted():
     assert claim.retrieval_timestamp.tzinfo is not None
 
 
-# ---------------------------------------------------------------------------
 # SpecialistOutput wrapper
-# ---------------------------------------------------------------------------
-
 
 def test_specialist_output_accepts_empty_lists():
     """A specialist may return no claims and no not_found; valid response."""
@@ -205,10 +187,7 @@ def test_specialist_output_with_claims_and_not_found():
     assert "market_trends" in output.not_found
 
 
-# ---------------------------------------------------------------------------
 # Sanity check on categories
-# ---------------------------------------------------------------------------
-
 
 def test_required_is_subset_of_allowed():
     """REQUIRED_CATEGORIES must be a subset of ALLOWED_CATEGORIES."""
