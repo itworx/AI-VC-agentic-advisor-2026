@@ -21,12 +21,27 @@ _NON_NAME_CAPITALIZED_WORDS = {
     "Arab", "Emirates", "Series", "A", "B", "C", "D",
 }
 
+_PERSON_CONTEXT_WORDS = {
+    "CEO", "CTO", "COO", "CFO", "founder", "co-founder", "cofounder",
+    "president", "chairman", "chairwoman", "director", "executive",
+    "said", "says", "stated", "told", "according", "led", "leads",
+    "run", "runs", "manager", "head",
+}
+
 
 def looks_like_named_individual(claim_text: str) -> bool:
     words = claim_text.split()
+    cleaned_words = [w.strip(".,()\"'") for w in words]
+
+    has_person_context = any(
+        w.lower().strip(".,()\"'") in {c.lower() for c in _PERSON_CONTEXT_WORDS}
+        for w in cleaned_words
+    )
+    if not has_person_context:
+        return False
+
     consecutive_capitalized = 0
-    for word in words:
-        cleaned = word.strip(".,()\"'")
+    for cleaned in cleaned_words:
         is_capitalized_word = (
             cleaned[:1].isupper()
             and cleaned not in _NON_NAME_CAPITALIZED_WORDS
