@@ -1,14 +1,4 @@
-"""
-Required and allowed claim categories.
 
-ALLOWED_CATEGORIES: every category a claim may have. The Claim schema
-validates category against this set, so a specialist cannot invent a new
-category without updating this file.
-
-REQUIRED_CATEGORIES: subset of ALLOWED_CATEGORIES that the supervisor treats
-as necessary for the memo. check_coverage compares the categories of
-accumulated claims against this set to decide whether more research is needed.
-"""
 
 from __future__ import annotations
 

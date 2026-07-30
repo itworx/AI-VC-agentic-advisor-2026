@@ -28,6 +28,7 @@ class Claim(BaseModel):
         ...,
         description="URL where this claim was found. Hard rule: required.",
     )
+    #source_url: HttpUrl | None = None (tested that its failed when source url is None)
     quoted_snippet: str = Field(
         ...,
         min_length=1,
