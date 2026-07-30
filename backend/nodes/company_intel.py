@@ -7,11 +7,13 @@ from langchain_tavily import TavilySearch
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from backend.models.claim import SpecialistOutput
+from backend.utils.cost_logger import log_cost
+from backend.utils.token_cost import estimate_cost
 
 COMPANY_INTEL_CATEGORIES = ["what_company_does", "target_customer", "business_model"]
 
 model = ChatGoogleGenerativeAI(model="gemini-3.6-flash")
-structured_model = model.with_structured_output(SpecialistOutput)
+structured_model = model.with_structured_output(SpecialistOutput, include_raw=True)
 search_tool = TavilySearch(max_results=5)
 
 
@@ -138,14 +140,27 @@ def company_intel(company_name: str, company_website: str) -> SpecialistOutput:
     prompt = build_extraction_prompt(company_name, pages)
 
     try:
-        result: SpecialistOutput = structured_model.invoke(prompt)
+        response = structured_model.invoke(prompt)
     except Exception as e:
         print(f"[company_intel] extraction failed: {e}")
         try:
-            result = structured_model.invoke(prompt)
+            response = structured_model.invoke(prompt)
         except Exception as e2:
             print(f"[company_intel] retry failed: {e2}")
             return SpecialistOutput(claims=[], not_found=COMPANY_INTEL_CATEGORIES)
+
+    result: SpecialistOutput = response["parsed"]
+
+    usage = getattr(response["raw"], "usage_metadata", None) or {}
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+    cost = estimate_cost(input_tokens, output_tokens)
+    log_cost(
+        node_name="company_intel",
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        estimated_cost=cost,
+    )
 
     for claim in result.claims:
         claim.specialist = "company_intel"
