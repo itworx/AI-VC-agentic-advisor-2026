@@ -1,10 +1,7 @@
 
-
 from __future__ import annotations
-
 from operator import add
 from typing import Annotated, Literal, TypedDict
-
 from backend.models.claim import Claim
 
 
