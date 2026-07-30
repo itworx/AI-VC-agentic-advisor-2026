@@ -27,6 +27,7 @@ class State(TypedDict):
 
     # --- Coverage tracking ---
     specialists_run: Annotated[list[str], add]
+    specialist_outputs: Annotated[list[dict], add]
     not_found: Annotated[list[str], add]
 
     # --- Supervisor state ---
@@ -61,6 +62,7 @@ def create_initial_state(company_name: str, company_url: str) -> State:
         screening_reason="",
         claims=[],
         specialists_run=[],
+        specialist_outputs=[],
         not_found=[],
         decision_log=[],
         iteration_count=0,
