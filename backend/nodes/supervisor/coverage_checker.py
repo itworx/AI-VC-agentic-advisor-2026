@@ -1,8 +1,6 @@
 from __future__ import annotations
-
 from backend.models.categories import REQUIRED_CATEGORIES
 from backend.state import State
-
 
 def check_coverage(state: State) -> dict:
     """
@@ -12,7 +10,7 @@ def check_coverage(state: State) -> dict:
       missing_categories: required categories with zero claims
     """
 
-    claim_categories = {c.category for c in state["claims"]}
+    claim_categories = {c["category"] for c in state["claims"]}
 
     covered = REQUIRED_CATEGORIES & claim_categories
     missing = REQUIRED_CATEGORIES - claim_categories
