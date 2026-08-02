@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -162,8 +164,11 @@ def company_intel(company_name: str, company_website: str) -> SpecialistOutput:
         estimated_cost=cost,
     )
 
+    fetched_at = datetime.now(timezone.utc)
+
     for claim in result.claims:
         claim.specialist = "company_intel"
+        claim.retrieval_timestamp = fetched_at
 
     safe_claims, _dropped = filter_named_individuals(result.claims)
     result.claims = safe_claims
