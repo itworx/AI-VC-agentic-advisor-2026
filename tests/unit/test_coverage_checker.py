@@ -19,7 +19,7 @@ def _claim(category: str) -> Claim:
         confidence="reported",
         category=category,
         retrieval_timestamp=datetime.now(tz=timezone.utc),
-    )
+    ).model_dump(mode="json")
 
 
 def _state_with_claims(claims: list[Claim]) -> State:
