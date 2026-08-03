@@ -16,8 +16,8 @@ run against it directly instead - worth revisiting with whoever owns SV-01.
 from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
-from backend.models.screening import ScreeningResult
-from backend.nodes.screening.screen_company import screen_company
+from backend.models.screening2 import ScreeningResult
+from backend.nodes.screening.screen_company2 import screen_company
 
 
 class _GateState(TypedDict):

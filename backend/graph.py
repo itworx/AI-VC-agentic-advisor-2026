@@ -1,12 +1,16 @@
 from __future__ import annotations
+from datetime import datetime, timezone
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 from backend.nodes.market_intel import market_intel
+from backend.nodes.company_intel import company_intel
+from backend.nodes.screening.screen_company2 import screen_company
 from backend.nodes.supervisor.coverage_checker import check_coverage
 from backend.nodes.supervisor.supervisor import supervisor
 from backend.nodes.team_signals import team_signals
 from backend.persistence import get_checkpointer
 from backend.state import State, create_initial_state
+from backend.models.claim import Claim
 
 
 # real specialist adapters
@@ -14,33 +18,102 @@ from backend.state import State, create_initial_state
 # return a SpecialistOutput. LangGraph nodes need to take State and return
 # a state-update dict. These adapters translate between the two.
 
+def screen_node(state: State) -> dict:
+    result = screen_company(
+        company_name=state["company_name"],
+        company_url=state["company_url"],
+    )
+    return {
+        "screening_decision": result.decision,
+        "screening_reason": result.reason,
+        "matched_criteria": result.matched_criteria,
+    }
 
 def market_intel_node(state: State) -> dict:
-    """Adapter for market_intel. Calls the real specialist, returns state update."""
+    """Adapter for market_intel.
+
+    Converts ClaimContent → Claim by adding a real retrieval_timestamp we
+    control (not one the LLM guessed). Serializes to dicts so the SQLite
+    checkpointer can persist state.
+    """
     output = market_intel(state["company_name"], state["company_url"])
+    fetched_at = datetime.now(tz=timezone.utc)
+    claims = []
+    for c in output.claims:
+        data = c.model_dump()
+        data["retrieval_timestamp"] = fetched_at  # our timestamp wins
+        claims.append(Claim(**data))
+    
+    dumped_claims = [c.model_dump(mode="json") for c in claims]
     return {
-        "claims": [c.model_dump(mode="json") for c in output.claims],
+        "claims": dumped_claims,
         "not_found": output.not_found,
         "specialists_run": ["market_intel"],
+        "specialist_outputs": [{
+            "specialist": "market_intel",
+            "claims": dumped_claims,
+            "not_found": output.not_found,
+        }],
     }
 
 
 def team_signals_node(state: State) -> dict:
-    """Adapter for team_signals. Calls the real specialist, returns state update."""
+    """Adapter for team_signals. Same pattern as market_intel_node."""
     output = team_signals(state["company_name"], state["company_url"])
+    fetched_at = datetime.now(tz=timezone.utc)
+    claims = []
+    for c in output.claims:
+        data = c.model_dump()
+        data["retrieval_timestamp"] = fetched_at  # our timestamp wins
+        claims.append(Claim(**data))
+
+    dumped_claims = [c.model_dump(mode="json") for c in claims]
     return {
-        "claims": [c.model_dump(mode="json") for c in output.claims],
+        "claims": dumped_claims,
         "not_found": output.not_found,
         "specialists_run": ["team_signals"],
+        "specialist_outputs": [{
+            "specialist": "team_signals",
+            "claims": dumped_claims,
+            "not_found": output.not_found,
+        }],
+    }
+def company_intel_node(state: State) -> dict:
+    """Adapter for company_intel. Same pattern as market_intel_node."""
+    output = company_intel(state["company_name"], state["company_url"])
+    fetched_at = datetime.now(tz=timezone.utc)
+    claims = []
+    for c in output.claims:
+        data = c.model_dump()
+        data["retrieval_timestamp"] = fetched_at  # our timestamp wins
+        claims.append(Claim(**data))
+        
+    dumped_claims = [c.model_dump(mode="json") for c in claims]
+    return {
+        "claims": dumped_claims,
+        "not_found": output.not_found,
+        "specialists_run": ["company_intel"],
+        "specialist_outputs": [{
+            "specialist": "company_intel",
+            "claims": dumped_claims,
+            "not_found": output.not_found,
+        }],
     }
 
 
 
 # stubs (fast, no API cost; used in tests and for company_intel until merge)
 
+def screen_stub(state: State) -> dict:
+    """Test stub: always passes so tests can exercise the rest of the graph."""
+    return {
+        "screening_decision": "pass",
+        "screening_reason": "test stub always passes",
+        "matched_criteria": ["test_criterion"],
+    }
 
 def company_intel_stub(state: State) -> dict:
-    """Placeholder for SP-02. Real company_intel is on a branch."""
+    """Test-only stub that skips the real API call."""
     return {"specialists_run": ["company_intel"]}
 
 
@@ -66,6 +139,12 @@ def route_from_supervisor(state: State) -> str:
     """Read next_action off state (set by supervisor). Return node name."""
     return state["next_action"]
 
+def route_after_screen(state: State) -> str:
+    """After screen: if reject, end the run without running specialists.
+    If pass, proceed to research. This is the whole cost-savings point of
+    putting screen first."""
+    return "check_coverage" if state["screening_decision"] == "pass" else "end"
+
 
 # graph builder
 
@@ -87,11 +166,15 @@ def build_graph(
     """
     builder = StateGraph(State)
 
+    builder.add_node("screen", screen_stub if use_stubs else screen_node)
     builder.add_node("check_coverage", check_coverage)
     builder.add_node("supervisor", supervisor)
 
     # company_intel is always stubbed for now (real version on a branch)
-    builder.add_node("company_intel", company_intel_stub)
+    builder.add_node(
+        "company_intel", 
+        company_intel_stub if use_stubs else company_intel_node,
+    )
     builder.add_node(
         "market_intel",
         market_intel_stub if use_stubs else market_intel_node,
@@ -103,7 +186,12 @@ def build_graph(
     builder.add_node("write_memo", write_memo_stub)
 
     # flow: coverage first (initial has no claims → all missing), then supervisor.
-    builder.add_edge(START, "check_coverage")
+    builder.add_edge(START, "screen")
+    builder.add_conditional_edges(
+            "screen",
+            route_after_screen,
+            {"check_coverage": "check_coverage", "end": END},
+        )
     builder.add_edge("check_coverage", "supervisor")
 
     # supervisor's conditional edge: reads next_action from state.
@@ -143,12 +231,16 @@ if __name__ == "__main__":
     config = {"configurable": {"thread_id": "sv01-live-run-1"}}
     initial = create_initial_state(
         company_name="Instabug",
-        company_url="https://instabug.com",
+        company_url="https://www.instabug.com",
     )
 
     print("Invoking graph...\n")
     result = graph.invoke(initial, config)
 
+    print(f"Screening decision: {result['screening_decision']}")
+    print(f"Screening reason: {result['screening_reason']}")
+    print(f"Matched thesis criteria: {result['matched_criteria']}")
+    print()
     print(f"Final iteration_count: {result['iteration_count']}")
     print(f"Specialists that ran: {result['specialists_run']}")
     print(f"Total claims collected: {len(result['claims'])}")

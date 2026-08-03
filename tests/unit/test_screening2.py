@@ -8,7 +8,7 @@ model's actual reasoning quality against the real thesis is checked in
 tests/manual/test_screen_company_live.py, which hits OpenRouter for real.
 """
 
-from backend.models.screening import ScreeningResult
+from backend.models.screening2 import ScreeningResult
 from backend.nodes.screening.screen_company2 import screen_company
 
 VAGUE_REASONS = {"not a good fit", "doesn't fit", "doesn't seem right", "not right for us"}
