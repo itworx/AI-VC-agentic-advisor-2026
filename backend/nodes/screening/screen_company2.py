@@ -24,7 +24,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from backend.models.screening import ScreeningResult
+from backend.models.screening2 import ScreeningResult
+from backend.services.fetch_service import fetch_page
 
 load_dotenv()
 
@@ -41,7 +42,7 @@ SCREEN_MODEL = "anthropic/claude-haiku-4.5"
 # NOTE: .env.example currently defines OPENAI_API_KEY, but this (and
 # test_openrouter.py / test_structured_output.py) read OPENROUTER_API_KEY.
 # Add OPENROUTER_API_KEY=... to your local .env or this silently gets api_key=None.
-
+MAX_PAGE_TEXT_CHARS = 4000
 
 def _default_llm():
     return ChatOpenAI(
@@ -63,20 +64,63 @@ def _render_prompt(thesis: str, company_information: str) -> str:
     )
 
 
-def screen_company(description: str, llm=None) -> ScreeningResult:
+# 
+def _build_company_information(
+    company_name: str,
+    company_url: str,
+    fetch=None,
+) -> str:
+    """Fetch the company homepage and format company_information for the prompt.
+
+    On fetch failure we still return usable text: the model sees the name and
+    URL plus a clear note that the site could not be read. It can then either
+    reject on that ground or pass based on the URL/name alone.
     """
-    description: short text about the company - name, sector, product, any
-        stage/traction signal available (e.g. "Company name: Swvl\\nWebsite:
-        https://www.swvl.com"). No live website fetch happens here.
-    llm: injectable structured-output client, defaults to the real
-        OpenRouter-backed model. Tests pass a fake here to stay offline -
-        see tests/unit/test_screening.py. Real-model checks against the
-        actual thesis live in tests/manual/test_screen_company_live.py.
+    fetch = fetch or fetch_page
+    result = fetch(company_url)
+
+    if result.status == "ok" and result.text:
+        page_text = result.text[:MAX_PAGE_TEXT_CHARS]
+        return (
+            f"Company name: {company_name}\n"
+            f"Website: {company_url}\n"
+            f"Homepage content (fetched):\n{page_text}"
+        )
+
+    return (
+        f"Company name: {company_name}\n"
+        f"Website: {company_url}\n"
+        f"Homepage content: NOT AVAILABLE ({result.status}: {result.reason})"
+    )
+
+
+def screen_company(
+    company_name: str,
+    company_url: str,
+    llm=None,
+    fetch=None,
+) -> ScreeningResult:
+    """
+    Screen one company against the Nile Ventures thesis.
+
+    company_name / company_url: identify the company. The homepage is fetched
+        and its extracted text is included in the prompt so the model can
+        judge sector/product/traction from real content, not from its
+        training-data knowledge of the company.
+    llm: injectable structured-output client. Defaults to the real
+        OpenRouter-backed model. Tests pass a fake to stay offline.
+    fetch: injectable page fetcher. Same idea, tests pass a fake so no real
+        network call happens.
     """
     if llm is None:
         llm = _default_llm()
 
     thesis = THESIS_PATH.read_text(encoding="utf-8")
-    prompt = _render_prompt(thesis=thesis, company_information=description)
+    company_information = _build_company_information(
+        company_name=company_name,
+        company_url=company_url,
+        fetch=fetch,
+    )
+    prompt = _render_prompt(thesis=thesis, company_information=company_information)
 
     return llm.invoke(prompt)

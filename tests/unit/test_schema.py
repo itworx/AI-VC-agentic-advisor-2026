@@ -1,19 +1,15 @@
 from __future__ import annotations
-
 from datetime import datetime, timezone
-
 import pytest
 from pydantic import ValidationError
-
 from backend.models.categories import ALLOWED_CATEGORIES, REQUIRED_CATEGORIES
-from backend.models.claim import Claim, SpecialistOutput
-
+from backend.models.claim import Claim, ClaimContent, SpecialistOutput
 
 # Helpers
 
 
-def _valid_claim_dict() -> dict:
-    """A dict that constructs a valid Claim. Use as a base and mutate."""
+def _valid_content_dict() -> dict:
+    """A dict that constructs a valid ClaimContent (no timestamp)."""
     return {
         "claim_text": "Acme Corp raised a $2M seed round in 2023.",
         "source_url": "https://example.com/acme-funding",
@@ -21,8 +17,16 @@ def _valid_claim_dict() -> dict:
         "specialist": "team_signals",
         "confidence": "reported",
         "category": "funding_stage",
+    }
+
+
+def _valid_claim_dict() -> dict:
+    """A dict that constructs a valid Claim (adds a retrieval_timestamp)."""
+    return {
+        **_valid_content_dict(),
         "retrieval_timestamp": datetime.now(tz=timezone.utc),
     }
+
 
 
 # C-03: A claim without a source URL is rejected.
@@ -185,6 +189,29 @@ def test_specialist_output_with_claims_and_not_found():
     )
     assert len(output.claims) == 1
     assert "market_trends" in output.not_found
+
+
+# ClaimContent (LLM-facing, no retrieval_timestamp)
+
+def test_claim_content_has_no_retrieval_timestamp_field():
+    """S-02: ClaimContent must not expose retrieval_timestamp to the LLM."""
+    fields = ClaimContent.model_fields
+    assert "retrieval_timestamp" not in fields, (
+        "retrieval_timestamp on ClaimContent would let the LLM invent it"
+    )
+
+
+def test_claim_content_constructs_without_timestamp():
+    """ClaimContent takes 6 fields; no timestamp needed."""
+    content = ClaimContent(**_valid_content_dict())
+    assert content.category == "funding_stage"
+
+
+def test_claim_inherits_content_fields_and_adds_timestamp():
+    """Claim has everything ClaimContent has, plus retrieval_timestamp."""
+    claim = Claim(**_valid_claim_dict())
+    assert claim.category == "funding_stage"
+    assert claim.retrieval_timestamp is not None
 
 
 # Sanity check on categories

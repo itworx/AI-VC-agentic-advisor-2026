@@ -19,6 +19,9 @@ class State(TypedDict):
     # screening (populated by screen node) 
     screening_decision: Literal["pass", "reject", ""]
     screening_reason: str
+     # thesis criteria the screen decision turned on. Populated by screen,
+     # read later by the memo writer for the audit trail.
+    matched_criteria: list[str]
 
     # claims accumulated across specialists 
     # 'add' means new claims append to the existing list, not overwrite it.
@@ -63,6 +66,7 @@ def create_initial_state(company_name: str, company_url: str) -> State:
         human_notes="",
         screening_decision="",
         screening_reason="",
+        matched_criteria=[],
         claims=[],
         covered_categories=[],
         missing_categories=[],
