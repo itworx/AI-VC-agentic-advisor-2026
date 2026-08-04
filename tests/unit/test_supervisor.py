@@ -166,3 +166,39 @@ def test_every_required_category_has_a_specialist():
     for cat in REQUIRED_CATEGORIES:
         assert cat in SPECIALIST_BY_CATEGORY
         assert SPECIALIST_BY_CATEGORY[cat] in SPECIALIST_ORDER
+
+
+
+# integration test: SV-04 acceptance ("forcing a no-progress loop stops")
+
+def test_no_progress_loop_terminates_within_iteration_cap(tmp_path):
+    """SV-04 acceptance: if specialists return no claims (no-progress
+    scenario), the graph must terminate without exceeding the iteration cap.
+
+    With stubbed specialists that return empty claims, supervisor's
+    'all specialists exhausted' condition fires around iteration 4, well
+    under ITERATION_CAP. This test confirms the graph terminates at all
+    under a no-progress scenario, and iteration_count stays within the cap.
+    """
+    from backend.graph import build_graph
+    from backend.persistence import get_checkpointer
+    from backend.state import create_initial_state
+
+    db_path = str(tmp_path / "cap-test.db")
+    checkpointer = get_checkpointer(db_path)
+    graph = build_graph(checkpointer=checkpointer, use_stubs=True)
+
+    config = {"configurable": {"thread_id": "iteration-cap-test"}}
+    result = graph.invoke(
+        create_initial_state("Test Co", "https://example.com"),
+        config,
+    )
+
+    # graph terminated (did not hang or raise)
+    assert result is not None
+
+    # cap was respected (either exhaustion stop or cap stop, both fine)
+    assert result["iteration_count"] <= ITERATION_CAP
+
+    # supervisor eventually routed to memo (proves it stopped, not looped)
+    assert result["decision_log"][-1]["chosen"] == "write_memo"
