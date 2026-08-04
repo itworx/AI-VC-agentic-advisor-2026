@@ -1,3 +1,7 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "--ignore=tests/manual -m 'not network'"
+markers = [
+    "network: tests that hit the real internet or paid APIs (deselect with -m 'not network')",
+]

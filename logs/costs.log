@@ -1,2 +1,9 @@
 2026-07-30T12:08:55.984355 | screening | input=100 | output=25 | cost=$0.000050
 2026-07-30T19:38:11.648316 | company_intel | input=1298 | output=1935 | cost=$0.001356
+2026-08-03T21:14:59.816615 | company_intel | input=1658 | output=1734 | cost=$0.001289
+2026-08-03T21:19:19.679140 | company_intel | input=1658 | output=1520 | cost=$0.001161
+2026-08-03T21:20:07.294267 | market_intel | input=7869 | output=5207 | cost=$0.004305
+2026-08-03T21:21:02.396859 | team_signals | input=9745 | output=3810 | cost=$0.003748
+2026-08-04T08:01:57.276506 | market_intel | input=9204 | output=4138 | cost=$0.003863
+2026-08-04T08:02:21.824108 | market_intel | input=9204 | output=4884 | cost=$0.004311
+2026-08-04T08:04:08.786744 | team_signals | input=13756 | output=3270 | cost=$0.004025

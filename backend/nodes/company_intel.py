@@ -55,9 +55,18 @@ def fetch_company_pages(company_name: str, company_website: str) -> list[dict]:
     try:
         results = search_tool.invoke({"query": query})
     except Exception as e:
-        print(f"[company_intel] search failed: {e}")
+        print(f"[company_intel] source unreachable: {e}")
         return []
-    return results.get("results", [])
+
+    pages = results.get("results", [])
+    usable_pages = []
+    for p in pages:
+        if not p.get("content", "").strip():
+            print(f"[company_intel] no text content found: {p.get('url')}")
+            continue
+        usable_pages.append(p)
+
+    return usable_pages
 
 
 def build_extraction_prompt(company_name: str, pages: list[dict]) -> str:
@@ -100,7 +109,7 @@ def company_intel(company_name: str, company_website: str) -> SpecialistOutput:
         claim.specialist = "company_intel"
         claim.retrieval_timestamp = fetched_at
 
-    result.claims, _ = verify_claims(result.claims, pages)
+    result.claims, _ = verify_claims(result.claims, pages, node_name="company_intel")
     result.claims, _ = filter_named_individuals(result.claims)
 
     return result
