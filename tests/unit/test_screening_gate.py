@@ -17,6 +17,7 @@ from langgraph.graph import END, StateGraph
 from typing_extensions import TypedDict
 
 from backend.models.screening2 import ScreeningResult
+from backend.services.fetch_service import FetchResult
 from backend.nodes.screening.screen_company2 import screen_company
 
 
@@ -34,11 +35,18 @@ class FakeLLM:
     def invoke(self, prompt: str) -> ScreeningResult:
         return self.result
 
+def _fake_fetch(url: str) -> FetchResult:
+    """Test fetch that always succeeds. Screen tests don't need real page text."""
+    return FetchResult(url=url, status="ok", text="fake homepage content")
 
 def _make_screen_node(fake_llm: FakeLLM):
     def screen_node(state: _GateState) -> dict:
-        description = f"Company name: {state['company_name']}\nWebsite: {state['company_url']}"
-        result = screen_company(description, llm=fake_llm)
+        result = screen_company(
+            company_name=state["company_name"],
+            company_url=state["company_url"],
+            llm=fake_llm,
+            fetch=_fake_fetch
+        )
         return {
             "screening_decision": result.decision,
             "screening_reason": result.reason,
