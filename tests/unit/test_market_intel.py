@@ -2,7 +2,9 @@
 Unit tests for market_intel's pure-Python helper logic. No network, no
 LLM calls -- fast and safe for automatic pytest runs.
 """
+from backend.models.claim import Claim
 from backend.nodes.market_intel import (
+    _force_snippet_claims_to_inferred,
     build_search_queries,
     dedupe_by_url,
     interleave,
@@ -38,6 +40,25 @@ def test_named_individual_with_said_is_flagged():
 
 def test_plain_sentence_with_no_names_is_not_flagged():
     text = "The market size for mobile observability tools is growing rapidly."
+    assert looks_like_named_individual(text) is False
+
+
+# S-03 regression tests: these three sentences were confirmed dropped by
+# the code-review POC before the fix, because the old substring check
+# matched market vocabulary against the signal set ("sector" contains
+# "cto", "platforms"/"systems" contain "ms", "hundreds" contains "dr").
+def test_poc_sentence_sector_is_not_flagged():
+    text = "Firebase Crashlytics and New Relic are the leading platforms in this sector."
+    assert looks_like_named_individual(text) is False
+
+
+def test_poc_sentence_includes_is_not_flagged():
+    text = "The mobile observability sector includes Sentry Bugsnag and Embrace."
+    assert looks_like_named_individual(text) is False
+
+
+def test_poc_sentence_hundreds_is_not_flagged():
+    text = "New Relic serves hundreds of enterprise customers."
     assert looks_like_named_individual(text) is False
 
 
@@ -80,3 +101,28 @@ def test_interleave_round_robins_across_sources():
 def test_interleave_handles_empty_source():
     result = interleave([[{"url": "a"}], []])
     assert [h["url"] for h in result] == ["a"]
+
+
+def _make_claim(source_url: str, confidence: str = "reported") -> Claim:
+    return Claim(
+        claim_text="Some competitor fact.",
+        source_url=source_url,
+        quoted_snippet="a real quote",
+        specialist="market_intel",
+        confidence=confidence,
+        category="competitors",
+    )
+
+
+def test_snippet_origin_claim_is_forced_to_inferred():
+    claim = _make_claim("https://g2.com/alternatives", confidence="verified")
+    pages = [{"url": "https://g2.com/alternatives", "content": "...", "origin": "snippet"}]
+    _force_snippet_claims_to_inferred([claim], pages)
+    assert claim.confidence == "inferred"
+
+
+def test_real_page_claim_confidence_is_untouched():
+    claim = _make_claim("https://techcrunch.com/article", confidence="verified")
+    pages = [{"url": "https://techcrunch.com/article", "content": "...", "origin": "page"}]
+    _force_snippet_claims_to_inferred([claim], pages)
+    assert claim.confidence == "verified"

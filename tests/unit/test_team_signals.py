@@ -2,7 +2,9 @@
 Unit tests for team_signals's pure-Python helper logic. No network, no
 LLM calls -- fast and safe for automatic pytest runs.
 """
+from backend.models.claim import Claim
 from backend.nodes.team_signals import (
+    _force_snippet_claims_to_inferred,
     build_search_queries,
     dedupe_by_url,
     interleave,
@@ -50,3 +52,28 @@ def test_interleave_round_robins_across_sources():
     about = [{"url": "a1"}]
     result = interleave([general, about])
     assert [h["url"] for h in result] == ["g1", "a1", "g2"]
+
+
+def _make_claim(source_url: str, confidence: str = "reported") -> Claim:
+    return Claim(
+        claim_text="Some company-level fact.",
+        source_url=source_url,
+        quoted_snippet="a real quote",
+        specialist="team_signals",
+        confidence=confidence,
+        category="team_size",
+    )
+
+
+def test_snippet_origin_claim_is_forced_to_inferred():
+    claim = _make_claim("https://example.com/profile", confidence="verified")
+    pages = [{"url": "https://example.com/profile", "content": "...", "origin": "snippet"}]
+    _force_snippet_claims_to_inferred([claim], pages)
+    assert claim.confidence == "inferred"
+
+
+def test_real_page_claim_confidence_is_untouched():
+    claim = _make_claim("https://instabug.com/about", confidence="verified")
+    pages = [{"url": "https://instabug.com/about", "content": "...", "origin": "page"}]
+    _force_snippet_claims_to_inferred([claim], pages)
+    assert claim.confidence == "verified"
