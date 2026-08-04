@@ -11,6 +11,8 @@ from backend.nodes.team_signals import team_signals
 from backend.persistence import get_checkpointer
 from backend.state import State, create_initial_state
 from backend.models.claim import Claim
+from backend.nodes.hitl.human_approval import human_approval, human_approval_stub
+
 
 
 # real specialist adapters
@@ -139,11 +141,20 @@ def route_from_supervisor(state: State) -> str:
     """Read next_action off state (set by supervisor). Return node name."""
     return state["next_action"]
 
-def route_after_screen(state: State) -> str:
-    """After screen: if reject, end the run without running specialists.
-    If pass, proceed to research. This is the whole cost-savings point of
-    putting screen first."""
-    return "check_coverage" if state["screening_decision"] == "pass" else "end"
+# def route_after_screen(state: State) -> str:
+#     """After screen: if reject, end the run without running specialists.
+#     If pass, proceed to research. This is the whole cost-savings point of
+#     putting screen first."""
+#     return "check_coverage" if state["screening_decision"] == "pass" else "end"
+def route_after_human_approval(state: State) -> str:
+    """After human_approval: end if human said no, or if screening
+    (possibly overridden by the human) is reject. Otherwise proceed to
+    research. This is the gate that stops us spending on specialists."""
+    if not state["human_approved"]:
+        return "end"
+    if state["screening_decision"] == "reject":
+        return "end"
+    return "check_coverage"
 
 
 # graph builder
@@ -152,6 +163,7 @@ def route_after_screen(state: State) -> str:
 def build_graph(
     checkpointer: SqliteSaver | None = None,
     use_stubs: bool = False,
+    stub_hitl: bool | None = None,
 ):
     """Build and compile the graph.
 
@@ -160,17 +172,26 @@ def build_graph(
       use_stubs: When True, replaces market_intel and team_signals with
                  fast stubs that don't call any API. Use in tests. Default
                  False = real specialists, real API calls, real costs.
+      stub_hitl: When True, replaces human_approval with an auto-approve
+                 stub that skips the interrupt() pause. Defaults to matching
+                 use_stubs — tests that just want the graph to run through
+                 don't want to handle a pause. Set to False explicitly in
+                 tests that exercise the pause/resume flow.
 
-    Note: company_intel is stubbed regardless of the flag because the real
-    version is still on a branch. Update this file when it merges.
+
     """
+    if stub_hitl is None:
+            stub_hitl = use_stubs
+
     builder = StateGraph(State)
 
     builder.add_node("screen", screen_stub if use_stubs else screen_node)
+    builder.add_node(
+            "human_approval",
+            human_approval_stub if stub_hitl else human_approval,
+        )
     builder.add_node("check_coverage", check_coverage)
     builder.add_node("supervisor", supervisor)
-
-    # company_intel is always stubbed for now (real version on a branch)
     builder.add_node(
         "company_intel", 
         company_intel_stub if use_stubs else company_intel_node,
@@ -185,11 +206,13 @@ def build_graph(
     )
     builder.add_node("write_memo", write_memo_stub)
 
-    # flow: coverage first (initial has no claims → all missing), then supervisor.
+    # flow: screen runs first (cheap), then human_approval pauses so the
+    # user can approve/override before we spend money on specialists.
     builder.add_edge(START, "screen")
+    builder.add_edge("screen", "human_approval")
     builder.add_conditional_edges(
-            "screen",
-            route_after_screen,
+            "human_approval",
+            route_after_human_approval,
             {"check_coverage": "check_coverage", "end": END},
         )
     builder.add_edge("check_coverage", "supervisor")
