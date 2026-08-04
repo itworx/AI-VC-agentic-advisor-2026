@@ -58,3 +58,33 @@ def test_graph_persists_separate_threads_independently(tmp_path: Path):
 
     assert state_a.values["company_name"] == "Company A"
     assert state_b.values["company_name"] == "Company B"
+
+def test_checkpointed_state_survives_new_graph_instance(tmp_path: Path):
+    """H-02 acceptance: run stops, restarts, resumes from same thread_id.
+
+    Simulates a process restart by building two independent graph instances
+    against the same DB. State written by the first must be readable by
+    the second. This is the guarantee interrupt() (H-03) relies on.
+    """
+    db_path = str(tmp_path / "test.db")
+
+    # First graph instance: run and let it write to the DB
+    checkpointer_a = get_checkpointer(db_path)
+    graph_a = build_graph(checkpointer=checkpointer_a, use_stubs=True)
+    config = {"configurable": {"thread_id": "restart-test"}}
+    result = graph_a.invoke(
+        create_initial_state("Test Co", "https://example.com"),
+        config,
+    )
+    expected_iterations = result["iteration_count"]
+    expected_specialists = result["specialists_run"]
+
+    # Second graph instance: fresh objects, same DB, read state back
+    checkpointer_b = get_checkpointer(db_path)
+    graph_b = build_graph(checkpointer=checkpointer_b, use_stubs=True)
+    state = graph_b.get_state(config)
+
+    # State written by graph_a must be readable by graph_b
+    assert state.values["iteration_count"] == expected_iterations
+    assert state.values["specialists_run"] == expected_specialists
+    assert state.values["company_name"] == "Test Co"
