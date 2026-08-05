@@ -95,3 +95,40 @@ Total companies: 8
 - Reason: Figma is a design and collaboration tool primarily serving creative and design teams, not a business-to-business software company in the sectors we target (fintech infrastructure, developer tools, vertical SaaS, logistics software, data infrastructure). While it has B2B elements, it does not fit our core sector focus.
 - Matched criteria: ['business-to-business software. Fintech infrastructure, developer tools, vertical SaaS, logistics software, data infrastructure']
 - Runtime: 3.4s
+
+
+---
+
+## I-04 — Mismatch analysis
+
+Two mismatches: Supabase (agent substantively wrong — missed paying-customer evidence in the fetched content) and Vezeeta (agent defensible — the case is deliberately ambiguous and the reasoning is sound).
+
+### Supabase — expected `pass`, actual `reject`
+
+**Expected reason (from companies.json):** "pass on sector, likely reject on stage - verify"
+
+**Agent's reject reason:** cited the traction floor — no evidence of paying customers or revenue on the homepage.
+
+**Ground-truth check:** fetched the first 4000 chars of https://supabase.com directly. The content **does** contain paying-customer evidence: a named customer testimonial ("Caleb Peffer, CEO, Firecrawl") for a real B2B company that switched from Pinecone to Supabase, a "How industry leaders are building with Supabase" section, "Trusted by fast-growing companies worldwide", and a Stripe Subscriptions Starter template.
+
+**Verdict:** the agent's reject reason is **substantively incorrect**. Sector (data infrastructure, developer tools) is a clear pass and the fetched content contains explicit paying-customer evidence. The screening prompt appears to weight overt pricing pages more than customer testimonials as traction evidence, missing the signal that was present. **Agent wrong, not expectation stale.** Worth flagging to the screening node owner: the prompt should treat named enterprise customer testimonials as traction evidence.
+
+### Vezeeta — expected `ambiguous`, actual `reject`
+
+**Expected reason (from companies.json):** "ambiguous - the interesting case. Either answer is acceptable if the reason is sound"
+
+**Agent's reject reason:** cited the consumer-services exclusion, noted Vezeeta's B2C patient-facing model, acknowledged MENA fit, concluded exclusion outweighs geographic fit.
+
+**Ground-truth check:** fetched both `vezeeta.com` (served Arabic) and `vezeeta.com/en` (served English). Both versions lead with patient-facing services: doctor search, appointment booking, medicine delivery, home visits, telehealth calls. No B2B/PMS software surface on the landing page in either language. The agent's characterisation of Vezeeta as B2C-first is directly supported by the fetched content.
+
+**Verdict:** the agent's reasoning meets the acceptance bar for this case — cites the thesis directly, identifies the right business-model tension, defensible on the fetched evidence. **Neither side is wrong, mismatch is expected by design.**
+
+**Side note on cross-language robustness:** the agent judged Vezeeta from the Arabic homepage (the default served) and reached a substantively correct conclusion. This is one data point in favour of cross-language screening but not proof — worth flagging as future work if the fund thesis expands to Arabic-first markets.
+
+### Six matches — no action needed
+
+Paymob, Instabug, dbt Labs, Hugging Face, Swvl, and Figma all matched their expected screening decisions. Reject reasons for the strong-companies-outside-thesis cases (Figma, Hugging Face) correctly cited sector fit rather than company quality, which was the whole point of including them.
+
+### Note on reject reasoning quality
+
+Two reject reasons (Supabase, dbt Labs) blamed the "paying customers" traction floor when sector fit or stage would have been the stronger available ground. The final decisions matched expectations for dbt Labs but not Supabase. In both cases the emphasis in the reasoning is weak. Worth flagging to the screening node owner for prompt tuning.
