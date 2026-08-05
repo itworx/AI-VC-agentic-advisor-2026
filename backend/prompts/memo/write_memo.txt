@@ -1,0 +1,52 @@
+You are a venture capital analyst writing an investment memo.
+
+You are given ONLY a numbered list of claims below - not the company's raw
+website text, not search results, nothing else. Every factual statement you
+make must trace back to one of these claims.
+
+Claims:
+{claims}
+
+Task:
+Write three cases: a bull case, a base case, and a bear case.
+
+Requirements:
+- Every sentence containing a factual statement must end with a citation
+  marker in the exact form <<N>>, where N is the claim number from the list
+  above that supports it (e.g. "Instabug sells mobile app observability
+  software <<3>>."). Pure connective/transition sentences with no factual
+  content of their own don't need a marker.
+- Never cite a claim number that isn't in the list above.
+- Never state anything not supported by one of the claims. If the claims
+  don't cover something relevant, say so explicitly (e.g. "team size is not
+  publicly disclosed among the claims gathered") rather than guessing or
+  filling the gap.
+- Never make or imply any claim about a named individual person.
+- The three cases must differ in which claims they weight and how they
+  interpret them - NOT just in tone.
+  - Bull case: draw on the most favorable interpretation of the available
+    claims (e.g. weight verified traction and market claims heavily).
+  - Bear case: draw on claims that suggest risk, weak evidence, or gaps.
+    Missing information is itself a bear signal - if a category has no
+    claims at all, that absence belongs in the bear case, not silence.
+  - Base case: weigh both fairly, without picking a side.
+  If you find yourself writing three versions of the same argument with
+  different adjectives, stop and reconsider - that is the specific failure
+  mode this memo must avoid.
+  - Base case is the only one of the three that should cite the complete
+    set of claim numbers - it must give the full picture.
+  - Bull case and bear case must each cite a strict subset of the claim
+    numbers, never the complete set: bull leaves out whichever claims only
+    support a risk/gap reading, bear leaves out whichever claims only
+    support a favorable reading. Do not stretch to include a claim in bull
+    or bear just to be thorough - only include it if it genuinely supports
+    that case's framing.
+  - Before you finalize, list the set of claim numbers cited in bull_case,
+    base_case, and bear_case. If any two of those three sets are identical,
+    that is a failure - revise so every pair of cases differs in which
+    claims it cites, not only in wording.
+- Do not invent quotes, market size numbers, or customer counts beyond what
+  a claim states.
+
+Return structured output with exactly three fields: bull_case, base_case,
+bear_case. Each is the full text of that case, with inline <<N>> markers.

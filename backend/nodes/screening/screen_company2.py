@@ -41,9 +41,6 @@ PROMPT_PATH = _REPO_ROOT / "backend" / "prompts" / "screening" / "screen_company
 # same model tier used for the memo writer or specialists.
 SCREEN_MODEL = "anthropic/claude-haiku-4.5"
 
-# NOTE: .env.example currently defines OPENAI_API_KEY, but this (and
-# test_openrouter.py / test_structured_output.py) read OPENROUTER_API_KEY.
-# Add OPENROUTER_API_KEY=... to your local .env or this silently gets api_key=None.
 MAX_PAGE_TEXT_CHARS = 4000
 
 
