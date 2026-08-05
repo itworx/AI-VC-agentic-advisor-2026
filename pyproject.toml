@@ -1,8 +1,7 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-
-[dependency-groups]
-dev = [
-    "pytest>=9.1.1",
+addopts = "--ignore=tests/manual -m 'not network'"
+markers = [
+    "network: tests that hit the real internet or paid APIs (deselect with -m 'not network')",
 ]

@@ -8,7 +8,8 @@ model's actual reasoning quality against the real thesis is checked in
 tests/manual/test_screen_company_live.py, which hits OpenRouter for real.
 """
 
-from backend.models.screening import ScreeningResult
+from backend.models.screening2 import ScreeningResult
+from backend.services.fetch_service import FetchResult
 from backend.nodes.screening.screen_company2 import screen_company
 
 VAGUE_REASONS = {"not a good fit", "doesn't fit", "doesn't seem right", "not right for us"}
@@ -41,7 +42,10 @@ def test_reject_swvl_names_a_specific_criterion():
     )
 
     result = screen_company(
-        "Company name: Swvl\nWebsite: https://www.swvl.com", llm=fake
+        company_name="Swvl",
+        company_url="https://swvl.com",
+        llm=fake,
+        fetch=_fake_fetch(),
     )
 
     assert result.decision == "reject"
@@ -62,7 +66,10 @@ def test_pass_instabug():
     )
 
     result = screen_company(
-        "Company name: Instabug\nWebsite: https://instabug.com", llm=fake
+        company_name="Instabug",
+        company_url="https://instabug.com",
+        llm=fake,
+        fetch=_fake_fetch(),
     )
 
     assert result.decision == "pass"
@@ -75,7 +82,12 @@ def test_thesis_file_reaches_the_prompt():
     fake = FakeLLM(
         ScreeningResult(decision="reject", reason="x", matched_criteria=["x"])
     )
-    screen_company("Some company.", llm=fake)
+    screen_company(
+        company_name="Some company",
+        company_url="https://example.com",
+        llm=fake,
+        fetch=_fake_fetch(),
+    )  # should not raise
 
     assert "Nile Ventures" in fake.last_prompt
     assert "seed to Series A" in fake.last_prompt
@@ -88,4 +100,15 @@ def test_prompt_survives_json_braces_in_template():
     fake = FakeLLM(
         ScreeningResult(decision="pass", reason="x", matched_criteria=["x"])
     )
-    screen_company("Any description.", llm=fake)  # should not raise
+    screen_company(
+        company_name="Any Co",
+        company_url="https://any.example.com",
+        llm=fake,
+        fetch=_fake_fetch(),
+    )  # should not raise
+
+def _fake_fetch(text: str = "fake homepage content"):
+    """Return a fetch stub that always returns ok with the given text."""
+    def _fetch(url: str) -> FetchResult:
+        return FetchResult(url=url, status="ok", text=text)
+    return _fetch

@@ -8,12 +8,11 @@ from backend.models.categories import ALLOWED_CATEGORIES
 Specialist = Literal["company_intel", "market_intel", "team_signals"]
 Confidence = Literal["verified", "reported", "inferred"]
 
+class ClaimContent(BaseModel):
+    """Fields the LLM extracts. Deliberately no retrieval_timestamp.
 
-class Claim(BaseModel):
-    """A single factual assertion about the company or its market.
-
-    Every field is required. Absence of any field must cause validation to
-    fail, which is the C-03 guarantee (see tests/unit/test_schema.py).
+    Passed to model.with_structured_output(...). Do not add fields here that
+    represent our own provenance signals — those go on Claim.
     """
 
     claim_text: str = Field(
@@ -55,10 +54,6 @@ class Claim(BaseModel):
             "Must be in ALLOWED_CATEGORIES."
         ),
     )
-    retrieval_timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc),
-        description="When the source was fetched (UTC).",
-    )
 
     @field_validator("quoted_snippet")
     @classmethod
@@ -80,6 +75,21 @@ class Claim(BaseModel):
             )
         return v
 
+class Claim(ClaimContent):
+    """A ClaimContent with our provenance timestamp added.
+
+    Constructed in post-processing (see graph.py adapters) using the actual
+    fetch time. Never handed to the LLM directly.
+
+    default_factory is a fallback for tests and manual construction; live code
+    should pass retrieval_timestamp explicitly so all claims from one
+    specialist run share one timestamp.
+    """
+
+    retrieval_timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(tz=timezone.utc),
+        description="When the source was fetched (UTC). Set by us, not the LLM.",
+    )
 
 class SpecialistOutput(BaseModel):
     """Wrapper for what a specialist returns via with_structured_output.

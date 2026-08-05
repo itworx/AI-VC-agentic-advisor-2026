@@ -4,6 +4,7 @@ mocked on purpose -- the point of SP-01 is verified behavior under real
 network conditions for each FetchStatus outcome.
 """
 import pytest
+pytestmark = pytest.mark.network
 
 from backend.services.fetch_service import fetch_page
 
