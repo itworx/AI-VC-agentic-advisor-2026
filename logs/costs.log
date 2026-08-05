@@ -31,3 +31,6 @@
 2026-08-05T09:40:15.852100 | company_intel | input=1944 | output=2163 | cost=$0.001589
 2026-08-05T09:44:56.204300 | screening | input=1893 | output=110 | cost=$0.000350
 2026-08-05T09:46:05.946891 | market_intel | input=8791 | output=3891 | cost=$0.003653
+2026-08-05T17:57:58.098871 | screening | input=1893 | output=110 | cost=$0.000350
+2026-08-05T17:58:16.493000 | company_intel | input=1612 | output=1883 | cost=$0.001372
+2026-08-05T17:59:02.377026 | market_intel | input=7989 | output=3508 | cost=$0.003303

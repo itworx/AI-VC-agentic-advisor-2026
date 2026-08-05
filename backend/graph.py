@@ -12,6 +12,9 @@ from backend.persistence import get_checkpointer
 from backend.state import State, create_initial_state
 from backend.models.claim import Claim
 from backend.nodes.hitl.human_approval import human_approval, human_approval_stub
+from backend.nodes.memo.write_memo import write_memo
+from backend.nodes.memo.render_citations import render_citations
+
 
 
 
@@ -100,6 +103,35 @@ def company_intel_node(state: State) -> dict:
             "claims": dumped_claims,
             "not_found": output.not_found,
         }],
+    }
+
+def write_memo_node(state: State) -> dict:
+    """Adapter for D's write_memo + render_citations.
+
+    Runs write_memo to get a MemoDraft with <<N>> markers, then
+    render_citations to produce the final numbered [k] footnotes and
+    Sources list. Stores the untruncated rendered memo in memo_rendered.
+    Page cap (enforce_page_cap) will run after the evaluator passes,
+    per D's ordering note in render_citations.py.
+    """
+    claims = [Claim(**c) for c in state["claims"]]
+
+    if not claims:
+        return {
+            "memo_bull": "[no claims collected — nothing to write]",
+            "memo_base": "[no claims collected — nothing to write]",
+            "memo_bear": "[no claims collected — nothing to write]",
+            "memo_rendered": "[no claims collected — nothing to write]",
+        }
+
+    draft = write_memo(claims)
+    rendered = render_citations(draft, claims)
+
+    return {
+        "memo_bull": draft.bull_case,
+        "memo_base": draft.base_case,
+        "memo_bear": draft.bear_case,
+        "memo_rendered": rendered,
     }
 
 
@@ -204,7 +236,9 @@ def build_graph(
         "team_signals",
         team_signals_stub if use_stubs else team_signals_node,
     )
-    builder.add_node("write_memo", write_memo_stub)
+    builder.add_node(
+        "write_memo", 
+        write_memo_stub if use_stubs else write_memo_node)
 
     # flow: screen runs first (cheap), then human_approval pauses so the
     # user can approve/override before we spend money on specialists.
@@ -311,6 +345,9 @@ if __name__ == "__main__":
     print(f"Covered:         {result['covered_categories']}")
     print(f"Missing:         {result['missing_categories']}")
     print(f"Not found:       {result['not_found']}")
+    print(f"\nMemo — Bull case:\n{result.get('memo_bull', '')[:500]}...")
+    print(f"\nMemo — Base case:\n{result.get('memo_base', '')[:500]}...")
+    print(f"\nMemo — Bear case:\n{result.get('memo_bear', '')[:500]}...")
     print(f"\nDecision log ({len(result['decision_log'])} entries):")
     for entry in result["decision_log"]:
         print(f"  iter {entry['iteration']}: chose {entry['chosen']} — {entry['reason']}")
