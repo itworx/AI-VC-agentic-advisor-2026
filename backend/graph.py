@@ -247,29 +247,67 @@ graph = build_graph()
 
 
 if __name__ == "__main__":
+    import sys
+    import os
+    from langgraph.types import Command
+
+    auto_approve = "--auto" in sys.argv
     # Live run, calls real APIs and costs real money.
     print("WARNING: this runs the graph with real specialists (Gemini + Tavily).")
-    print("Set use_stubs=True in build_graph() if you just want to verify wiring.\n")
 
-    config = {"configurable": {"thread_id": "sv01-live-run-1"}}
+    # Fresh thread every run so we always start clean
+    thread_id = f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # config = {"configurable": {"thread_id": "hitl-test-1"}}
     initial = create_initial_state(
         company_name="Instabug",
         company_url="https://www.instabug.com",
     )
+    
 
+    # print("Invoking graph...\n")
+    # result = graph.invoke(initial, config)
+
+    # print(f"Screening decision: {result['screening_decision']}")
+    # print(f"Screening reason: {result['screening_reason']}")
+    # print(f"Matched thesis criteria: {result['matched_criteria']}")
+    # print()
+    # print(f"Final iteration_count: {result['iteration_count']}")
+    # print(f"Specialists that ran: {result['specialists_run']}")
+    # print(f"Total claims collected: {len(result['claims'])}")
+    # print(f"Coverage covered: {result['covered_categories']}")
+    # print(f"Coverage missing: {result['missing_categories']}")
+    # print(f"Not found: {result['not_found']}")
+    # print(f"\nDecision log ({len(result['decision_log'])} entries):")
+    # for entry in result["decision_log"]:
+    #     print(f"  iter {entry['iteration']}: chose {entry['chosen']} — {entry['reason']}")
+
+    # First invoke: screen runs, graph pauses at human_approval
     print("Invoking graph...\n")
     result = graph.invoke(initial, config)
 
     print(f"Screening decision: {result['screening_decision']}")
-    print(f"Screening reason: {result['screening_reason']}")
-    print(f"Matched thesis criteria: {result['matched_criteria']}")
-    print()
-    print(f"Final iteration_count: {result['iteration_count']}")
-    print(f"Specialists that ran: {result['specialists_run']}")
-    print(f"Total claims collected: {len(result['claims'])}")
-    print(f"Coverage covered: {result['covered_categories']}")
-    print(f"Coverage missing: {result['missing_categories']}")
-    print(f"Not found: {result['not_found']}")
+    print(f"Screening reason:   {result['screening_reason']}")
+    print(f"Matched criteria:   {result['matched_criteria']}\n")
+
+    state = graph.get_state(config)
+    if state.next:
+        if auto_approve:
+            print("Auto-approving (--auto flag set)\n")
+            human_response = {"approved": True, "override_decision": None, "override_reason": None, "notes": None}
+        else:
+            choice = input("Approve this company? [y/n]: ").strip().lower()
+            approved = choice == "y"
+            human_response = {"approved": approved, "override_decision": None, "override_reason": None, "notes": None}
+
+        result = graph.invoke(Command(resume=human_response), config)
+
+    print(f"\nSpecialists ran: {result['specialists_run']}")
+    print(f"Claims:          {len(result['claims'])}")
+    print(f"Covered:         {result['covered_categories']}")
+    print(f"Missing:         {result['missing_categories']}")
+    print(f"Not found:       {result['not_found']}")
     print(f"\nDecision log ({len(result['decision_log'])} entries):")
     for entry in result["decision_log"]:
         print(f"  iter {entry['iteration']}: chose {entry['chosen']} — {entry['reason']}")
