@@ -194,30 +194,32 @@ Verifies:
 The system is a single LangGraph state graph. All nodes read from and write to a shared `State` object. Routing between nodes is deterministic and controlled by two pure-Python router functions: one after human approval, one after the supervisor.
 
 ### Node flow
-START
-│
-▼
-[screen] ── one cheap LLM call, judges thesis fit from homepage content
-│
-▼
-[human_approval] ── interrupt() pauses the graph until a human responds
-│
-├─ approved=False or decision=reject ──► END
-│
-└─ approved=True and decision=pass
-│
-▼
-[check_coverage] ── pure Python, computes covered vs missing categories
-│
-▼
-[supervisor] ── ~30 lines of Python, picks next specialist or memo
-│
-├─► [company_intel] ──┐
-├─► [market_intel] ──┼──► back to [check_coverage]
-├─► [team_signals] ──┘
-│
-└─► [write_memo] ──► END
 
+```
+START
+  │
+  ▼
+[screen] ── one cheap LLM call, judges thesis fit from homepage content
+  │
+  ▼
+[human_approval] ── interrupt() pauses the graph until a human responds
+  │
+  ├─ approved=False or decision=reject ──► END
+  │
+  └─ approved=True and decision=pass
+       │
+       ▼
+    [check_coverage] ── pure Python, computes covered vs missing categories
+       │
+       ▼
+    [supervisor] ── ~30 lines of Python, picks next specialist or memo
+       │
+       ├─► [company_intel] ──┐
+       ├─► [market_intel]  ──┼──► back to [check_coverage]
+       ├─► [team_signals]  ──┘
+       │
+       └─► [write_memo] ──► END
+```
 ### Screening
 
 `backend/nodes/screening/screen_company.py`. One LLM call against a small model (Claude Haiku 4.5 via OpenRouter). Fetches the company homepage (up to 4,000 chars) so it judges from real content rather than the model's training data. Returns `{decision: pass|reject, reason, matched_criteria}`.
@@ -292,7 +294,10 @@ Detailed per-node breakdown in `docs/I06_cost_analysis.md`.
 
 ### Backend
 
-- FastAPI
+- Python
+- LangGraph state graph
+
+FastAPI was considered but not implemented — the graph is invoked directly by the CLI and (planned) by Streamlit in-process, so an HTTP layer would sit between them without a job. If the system is later deployed as a service for other teams to call, FastAPI is the natural fit in front of `build_graph()`.
 
 ### Agent Framework
 
@@ -458,15 +463,34 @@ Copy `.env.example` to `.env` and add your API keys:
 
 ### Run the Graph
 
-```bash
+Interactive mode (prompts for human approval at the HITL pause):
+
+​```bash
 python -m backend.graph
-```
+​```
+
+Batch mode over all 8 companies from `project3_inputs/companies.json`
+(auto-approves at HITL, writes a report to `docs/eight_company_run.md`):
+
+​```bash
+python -m scripts.run_all_companies
+​```
+
+### Inspect the Graph in LangGraph Studio
+
+For an interactive visual demo of the graph, HITL pause, and per-node state:
+
+​```bash
+langgraph dev
+​```
 
 ### Run the Frontend (planned)
 
-```bash
+A Streamlit UI 
+
+​```bash
 streamlit run frontend/app.py
-```
+​```
 
 ---
 
