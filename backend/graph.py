@@ -257,7 +257,10 @@ if __name__ == "__main__":
 
     # Fresh thread every run so we always start clean
     thread_id = f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id},
+              "recursion_limit": 40
+              }
+
 
     # config = {"configurable": {"thread_id": "hitl-test-1"}}
     initial = create_initial_state(
