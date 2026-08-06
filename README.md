@@ -497,3 +497,14 @@ streamlit run frontend/app.py
 ## License
 
 This project is developed for educational and internship purposes as part of the ITWorx AI Engineering Internship Program.
+
+## Frontend (Run console)
+
+Streamlit UI for live runs with the human-approval pause.
+
+    pip install -r requirements.txt
+    streamlit run frontend/app.py            # real run (needs .env keys)
+    VC_UI_STUBS=1 streamlit run frontend/app.py   # free dev mode (stub specialists)
+
+Open http://localhost:8501. Enter a company name and website, review the
+screening verdict in the dialog, then approve, override, or end the run.
