@@ -64,20 +64,45 @@ def _numbered_claims_block(claims: list[Claim]) -> str:
     return "\n".join(lines)
 
 
-def _render_prompt(claims: list[Claim]) -> str:
+def _feedback_block(feedback: str) -> str:
+    """The evaluator's rejection (E-02), appended as a revision brief.
+
+    Goes at the END of the prompt on purpose: it's the most recent and most
+    specific instruction, and it has to outrank the general guidance above it
+    when the two appear to conflict.
+    """
+    if not feedback.strip():
+        return ""
+    return (
+        "\n\n"
+        "=== REVISION REQUIRED — EVALUATOR FEEDBACK ON YOUR PREVIOUS DRAFT ===\n"
+        f"{feedback.strip()}\n"
+        "=== END EVALUATOR FEEDBACK ===\n"
+    )
+
+
+def _render_prompt(claims: list[Claim], feedback: str = "") -> str:
     # Not str.format(): keep this consistent with screen_company.py's
     # approach in case the prompt ever grows a literal-brace JSON example.
     template = PROMPT_PATH.read_text(encoding="utf-8")
-    return template.replace("{claims}", _numbered_claims_block(claims))
+    return (
+        template
+        .replace("{claims}", _numbered_claims_block(claims))
+        .replace("{feedback}", _feedback_block(feedback))
+    )
 
 
-def write_memo(claims: list[Claim], llm=None) -> MemoDraft:
+def write_memo(claims: list[Claim], llm=None, feedback: str = "") -> MemoDraft:
     """
     claims: the FULL accumulated claims list from state (not raw web text).
     llm: injectable structured-output client, defaults to the real
         OpenRouter-backed model. Tests inject a fake to stay offline - see
         tests/unit/test_write_memo.py. Real-model checks live in
         tests/manual/test_write_memo_live.py.
+    feedback: evaluator_feedback from a previous rejected pass (E-02). Empty
+        on the first draft. When present, the same claims are re-drafted with
+        the named untraced sentences quoted back - the claims list itself
+        never changes between passes, only the instructions about it.
     """
     if not claims:
         raise ValueError(
@@ -88,7 +113,7 @@ def write_memo(claims: list[Claim], llm=None) -> MemoDraft:
     if llm is None:
         llm = _default_llm()
 
-    prompt = _render_prompt(claims)
+    prompt = _render_prompt(claims, feedback)
     return llm.invoke(prompt)
 
 

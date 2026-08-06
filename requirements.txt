@@ -1,4 +1,8 @@
 langgraph==1.2.10
+# backend/graph.py imports SqliteSaver from langgraph.checkpoint.sqlite, which
+# ships separately from langgraph itself. Was missing here, so a fresh install
+# could not import the graph at all.
+langgraph-checkpoint-sqlite==3.1.1
 
 langchain==1.3.14
 langchain-openai==1.4.1

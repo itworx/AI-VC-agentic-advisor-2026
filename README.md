@@ -180,10 +180,11 @@ using validated claims only.
 
 Verifies:
 
-- Claim traceability
-- Citation integrity
-- Memo quality
-- Coverage completeness
+- Claim traceability — every memo sentence traces to a claim in the claims list
+- Citation integrity — no marker may point at a claim that doesn't exist
+- Rejects with feedback naming the specific offending sentences, capped at 2 passes
+
+Implementation detail in [Evaluator (E-01 / E-02 / E-03)](#evaluator-e-01--e-02--e-03) below.
 
 ---
 
@@ -218,8 +219,30 @@ START
        ├─► [market_intel]  ──┼──► back to [check_coverage]
        ├─► [team_signals]  ──┘
        │
-       └─► [write_memo] ──► END
+       └─► [write_memo] ── model sees the claims list only, never raw web text.
+             │              Emits the raw <<N>> draft; no rendering here.
+             ▼
+          [evaluate] ── every memo sentence must trace to a claim
+             │
+             ├─ rewrite (blocking violations, under the 2-pass cap)
+             │     └──► back to [write_memo] with the feedback attached
+             │
+             └─ accept / accept_capped
+                   │
+                   ▼
+             [render_citations] ── [k] footnotes, Sources, 4-page cap, and on
+                   │               accept_capped a warning banner
+                   ▼
+                  END
 ```
+
+Rendering sits **downstream** of the evaluator, not upstream. `render_citations`
+raises `UnresolvedCitationError` on an out-of-range `<<N>>`, so with the original
+ordering a hallucinated citation killed the run inside the renderer before the
+evaluator could turn it into a clean reject — making the evaluator's
+`unresolved_citation` verdict unreachable in production. The evaluator doesn't
+need rendered text anyway: it reads the raw `<<N>>` draft, where markers are
+claim indices directly rather than renumbered footnotes.
 ### Screening
 
 `backend/nodes/screening/screen_company.py`. One LLM call against a small model (Claude Haiku 4.5 via OpenRouter). Fetches the company homepage (up to 4,000 chars) so it judges from real content rather than the model's training data. Returns `{decision: pass|reject, reason, matched_criteria}`.
@@ -244,6 +267,165 @@ START
 
 The iteration cap is the guard against infinite loops.
 
+### Evaluator (E-01 / E-02 / E-03)
+
+`backend/nodes/evaluation/`. Two tiers, and the split is the design:
+
+| | Tier 1 — `evaluate.py` | Tier 2 — `support.py` |
+|---|---|---|
+| Question | Is there a marker, and does it resolve? | Does the cited claim actually *say* this? |
+| Method | Pure Python | One model call per pass |
+| Cost | Free | ~1 cheap call (Haiku) |
+| Authority | Final — nothing can clear its findings | Can only **add** violations |
+
+Tier 1 is the floor precisely because it can't be argued with. But marker
+presence is not entailment, and that leaves the obvious hole: a model satisfies
+tier 1 completely by spraying plausible markers onto sentences the claims don't
+support. Closing that needs a judge, so tier 2 is quarantined in its own module,
+sees **only** the sentence and its cited claim text — never the memo, the other
+claims, or any web content — and uses a *different* model from the memo writer,
+since a judge sharing the writer's blind spots is worth much less.
+
+Tier 2's structural guarantee is that it can only add violations. No amount of
+agreeable judging can unblock a sentence carrying no citation at all. Its
+verdicts default to **unsupported** when the judge omits, duplicates, or
+out-of-ranges an index — a judge that fails to answer must not thereby wave a
+sentence through. If the support model is unreachable the run continues on tier 1
+and records that it degraded, rather than silently losing coverage.
+
+It reads the raw draft sections (`memo_bull`/`memo_base`/`memo_bear`), which
+still carry write_memo's `<<N>>` markers pointing straight at claim indices —
+not `memo_rendered`, whose `[k]` footnotes have been renumbered to
+first-appearance order and would need mapping back through
+`render_citations`' id_map to mean anything.
+
+**E-01 — traceability.** Splits each section into sentences (conservatively:
+no splitting inside `$1.2 billion`, `U.S.`, or initials; bullet items count as
+sentences even without terminal punctuation, since an unsourced figure hiding
+in a bullet is exactly the failure mode being hunted). Each sentence is then
+classified:
+
+| Kind | Blocking? | Meaning |
+|---|---|---|
+| `untraced_factual` | **yes** | no `<<N>>` marker but asserts something about the company — the invented market size / customer count / team size case, and equally an uncited product or positioning claim carrying no numbers at all |
+| `unresolved_citation` | **yes** | cites `<<N>>` where N is not a real claim index. A marker pointing at nothing looks *sourced* to a reader, so it can never be advisory |
+| `unsupported_by_claim` | **yes** | tier 2: cites a real claim that doesn't say this. Misattribution is the failure a citation is supposed to make impossible |
+| `untraced` | no | no marker, but the sentence is about the memo's own reasoning rather than the company ("the bear case rests on what the claims do not tell us"). It asserts nothing that could be true or false |
+| `weak_support` | no | cites a claim it shares no content words with. A cheap lexical hint, superseded by `unsupported_by_claim` whenever tier 2 runs |
+
+**An unmarked sentence is blocking by default.** Exactly two things excuse one:
+
+1. A statement that information could not be found — there is no claim to cite
+   for a gap.
+2. A statement about the memo's own reasoning rather than the company.
+
+Digits and currency are checked first and override both exemptions, so neither
+"revenue is around 40 million, though not publicly disclosed" nor "the bear case
+rests on 40% annual churn" can launder a figure past the check.
+
+**Gap statements are detected structurally, not by phrase list.** A negation word
+(`no`, `not`, `absent`, `absence`, `lack`, `without`) followed within 60
+characters — never across a sentence boundary — by an *information* word (`data`,
+`claims`, `evidence`, `traction`, `figures`, `disclosed`, `basis`, `transparency`,
+…), plus standalone forms like `undisclosed` / `unreported` that mean absence on
+their own. Two successive live runs each added one phrase a literal list didn't
+have, which is the signature of a rule enumerated at the wrong level: memos have
+many ways to say "we don't know this" and only so many words for the knowing.
+
+The pairing is what keeps it honest. A bare negation word would exempt far too
+much — *"Absent serious competitors, Instabug dominates the market"* is an
+unsourced assertion, not a gap statement, and `competitors` is not an information
+word, so it stays blocking. That loophole and three variants of it are pinned by
+tests.
+
+**Why the default runs this way round.** The first version inverted it: an
+allowlist of factual-sounding words (revenue, market, headcount…) with anything
+else assumed connective. A live run walked straight through it — *"Instabug
+provides mobile app monitoring and bug reporting tools for developers"* contains
+no finance vocabulary, so an uncited product claim scored as merely advisory.
+Any allowlist of factual words has that hole, because the set of things a
+company can factually do is unbounded; the set of ways to refer to this memo's
+own reasoning is not. When the current heuristic is wrong it costs a rework
+cycle. When the old one was wrong, an uncited assertion shipped.
+
+**What tier 2 does and does not police.** Its mandate is deliberately narrow:
+*does the sentence introduce a specific, checkable fact that no cited claim
+states?* Invented numbers, invented business properties (profitability, growth,
+retention, headcount), and citations pointing at a claim about a different
+subject are all caught. Interpretation is not — however far it reaches — because
+a memo exists to interpret, and a judge that treats analysis as fabrication makes
+memo-writing impossible.
+
+That last point is measured, not assumed. A first version of the judge asked for
+strict entailment and **all four** test claim sets failed to converge: it rejected
+sentences like *"Rasa provides an open-source framework `<<1>>`, giving
+engineering teams a flexible foundation"*, whose factual core is verbatim the
+claim. Narrowing the mandate to fabricated specifics took convergence from 0/4 to
+4/4, while still catching *"Instabug is profitable and retains 95% of its
+customers `<<1>>`"* and a market-size sentence citing a product claim.
+
+**Still not covered:** whether a memo's *overall* argument is fair, whether
+interpretation is sound, and whether the claims themselves were correctly
+extracted from their sources. Those stay with the human read-through in I-05.
+
+**E-02 — feedback.** On reject, `format_feedback()` quotes every blocking
+sentence verbatim with its section and the specific reason, tells the model the
+valid marker range so it can't "fix" the problem by inventing `<<9>>`, and
+states explicitly that deleting a sentence — or replacing it with a "not found"
+statement — is always the correct fix when no claim covers it. The feedback is
+appended to the *end* of the write_memo prompt, where it outranks the general
+guidance above it. Claims never change between passes; only the instructions do.
+
+**E-03 — the cap.** `EVALUATOR_CAP = 2`. Evaluate runs at most twice, which
+allows at most one rewrite. If the second pass still finds blocking violations,
+the decision is `accept_capped`: the memo ships, but with a warning banner
+prepended naming the count of still-untraced sentences, and the full feedback
+retained in `evaluator_feedback`. Silently emitting a memo that failed its own
+traceability check would be the worst thing this pipeline could do.
+
+The M-05 four-page cap (`enforce_page_cap`) runs inside this node, and only on
+an accept — truncating earlier would risk cutting a sentence the evaluator was
+about to check.
+
+**Verification.**
+
+Offline, no model calls, no keys needed:
+
+- `tests/unit/test_evaluate.py` — tier 1 logic, the node's three decisions, cap
+- `tests/unit/test_evaluate_support.py` — tier 2 plumbing and its failure
+  handling, with the judge faked
+- `tests/unit/test_memo_pipeline_graph.py` — the real evaluator and real renderer
+  running inside `build_graph()`, via
+  `build_graph(use_stubs=True, stub_evaluator=False)`. Before this existed every
+  graph test stubbed the evaluator, so the real node had never once executed
+  inside the real graph and a rendering-order bug could not have been caught.
+
+Live (`pytest tests/manual/test_evaluate_live.py -v -s -o addopts=""` —
+pyproject's `addopts` ignores `tests/manual`, so the override is required):
+
+- a genuine draft converges inside the 2-pass budget
+- E-02 feedback actually makes the model fix a named sentence
+- tier 2 catches a marker sprayed onto an unsupported sentence, and leaves a
+  legitimate paraphrase alone
+- **tier 2 detection rate**, measured against 17 labelled probes that all pass
+  tier 1 by construction (so the measurement isolates tier 2's own judgement):
+  10 fabrications ranging from a blatant customer count to an invented funding
+  round, against 7 legitimate sentences from plain paraphrase up to
+  far-reaching interpretation. Last measured **10/10 fabrications caught, 0/7
+  false alarms, stable across three consecutive runs**. Thresholds in the test
+  are ≥8 caught and ≤1 false alarm — a layer catching half of these would not
+  be worth a model call, and one crying wolf more than about once in seven
+  would burn rework cycles every run
+- **four unrelated claim sets** — observability, fintech, devtool, and a
+  deliberately thin-information one — all converge. This is the guard against
+  heuristics tuned to a single company, which is exactly what the gap-statement
+  and meta-sentence rules were at first. Last measured: 8/8 clean on draft 1
+  across two consecutive runs.
+
+Five of this evaluator's rules exist because a live test caught the first version
+getting them wrong. The offline tests are where each of those regressions is
+pinned.
+
 ### Coverage checker
 
 `backend/nodes/supervisor/coverage_checker.py`. Pure Python, no LLM. Takes the claims list and required categories, returns sorted `covered_categories` and `missing_categories`. Runs after every specialist to update state.
@@ -260,6 +442,13 @@ Defined in `backend/state.py`. Key fields:
 - `not_found` — categories a specialist looked for and could not find
 - `covered_categories`, `missing_categories` — coverage checker output
 - `iteration_count`, `decision_log` — supervisor bookkeeping
+- `memo_bull`, `memo_base`, `memo_bear` — raw draft sections, `<<N>>` markers intact
+- `memo_rendered` — the memo with `[k]` footnotes and a Sources section
+- `evaluator_iterations`, `evaluator_decision` — evaluator bookkeeping. The
+  decision is deliberately *not* `next_action`: that field belongs to the
+  supervisor, and sharing it would corrupt the decision log
+- `evaluator_feedback`, `evaluator_violations` — why a draft was rejected, kept
+  on state so a rejected memo stays inspectable in the checkpoint afterwards
 
 ---
 
@@ -457,8 +646,15 @@ pip install -r requirements.txt
 
 Copy `.env.example` to `.env` and add your API keys:
 
-- `OPENROUTER_API_KEY` — used by the screening node
-- `GOOGLE_API_KEY` — used by specialists (Gemini)
+- `OPENROUTER_API_KEY` — screening, memo writer, evaluator support check
+- `GOOGLE_API_KEY` — only needed to *run* the specialists, but currently
+  required to **import `backend.graph` at all**: `market_intel` and
+  `team_signals` construct their Gemini client at module level, so the import
+  fails without some value present. `tests/conftest.py` installs placeholders so
+  the offline test suite needs no real keys. Note this is the only part of the
+  pipeline not on OpenRouter — screening, the memo writer and the evaluator's
+  support check all go through it. Porting those two specialists would drop this
+  key from the project (open question for roles B/C).
 - `TAVILY_API_KEY` — used by specialists for web search
 
 ### Run the Graph
