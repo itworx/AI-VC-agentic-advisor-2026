@@ -13,11 +13,20 @@ them into a readable memo document:
     is something a model can talk itself past ("just a bit more detail is
     warranted here"); a word-count cutoff in code can't be argued with.
 
-Ordering in the real pipeline: write_memo -> render_citations (this module,
-producing the FULL untruncated doc) -> evaluate (E-01, checks traceability
-on the full doc, needs every marker already resolved) -> only once evaluate
-passes, enforce_page_cap() runs as the final step. Truncating before
-evaluate would risk cutting a sentence the evaluator was about to check.
+Ordering in the real pipeline:
+
+    write_memo -> evaluate -> [accept] -> render_citations -> enforce_page_cap
+
+CORRECTED from this module's original note, which had render_citations running
+BEFORE evaluate. That order cannot work: _build_id_map raises
+UnresolvedCitationError on an out-of-range <<N>>, so a hallucinated citation
+crashed the renderer before the evaluator ever saw it - turning what should be a
+clean "reject with feedback and rewrite" into a dead run. The evaluator does not
+need rendered text anyway; it reads the raw <<N>> draft, where markers are claim
+indices directly rather than renumbered [k] footnotes.
+
+Truncation stays last, after the evaluator has passed, so the page cap can never
+cut a sentence out from under the traceability check.
 """
 
 import re
@@ -63,6 +72,35 @@ def _renumber_section(text: str, id_map: dict[int, int]) -> str:
         return f"[{id_map[original_id]}]"
 
     return CITATION_PATTERN.sub(_sub, text)
+
+
+def strip_unresolved_markers(memo: MemoDraft, claims: list[Claim]) -> tuple[MemoDraft, list[int]]:
+    """Remove <<N>> markers that don't resolve to a claim. Returns the cleaned
+    draft and the sorted list of bad indices removed.
+
+    Only for the accept_capped path. Normally an unresolved marker is a blocking
+    evaluator violation and the draft gets rewritten, so this never runs. But
+    when the E-03 cap is spent the memo ships anyway, and it must not ship by
+    raising UnresolvedCitationError out of the final node. Dropping a marker
+    that points at nothing is the least-bad option available at that point: the
+    sentence then reads as uncited, which is exactly what it is, and the warning
+    banner says so. Rendering it as a live-looking footnote would be worse.
+    """
+    bad: set[int] = set()
+
+    def _sub(match: re.Match) -> str:
+        n = int(match.group(1))
+        if n < 1 or n > len(claims):
+            bad.add(n)
+            return ""
+        return match.group(0)
+
+    cleaned = MemoDraft(
+        bull_case=CITATION_PATTERN.sub(_sub, memo.bull_case),
+        base_case=CITATION_PATTERN.sub(_sub, memo.base_case),
+        bear_case=CITATION_PATTERN.sub(_sub, memo.bear_case),
+    )
+    return cleaned, sorted(bad)
 
 
 def render_citations(memo: MemoDraft, claims: list[Claim]) -> str:

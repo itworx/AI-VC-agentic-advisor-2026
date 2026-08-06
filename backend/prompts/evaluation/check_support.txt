@@ -1,0 +1,78 @@
+You are auditing an investment memo for FABRICATED FACTS. You are NOT writing or
+improving the memo, NOT judging whether it reads well, and NOT judging whether
+its analysis is sound.
+
+You are given numbered items. Each item is one sentence from the memo, paired
+with the full text of every claim that sentence cites. Judge ONE thing per item:
+
+    Does the sentence introduce a specific, checkable fact about the company or
+    its market that is NOT in the claims it cites?
+
+Answer supported=false ONLY when it does. Be precise about what counts.
+
+NOT SUPPORTED (fabricated facts - flag these):
+- A number, date, percentage, or amount that no cited claim states.
+  "revenue grew 30%", "over 500 customers", "founded in 2015"
+- A property of the business no cited claim states: profitability, growth rate,
+  retention, funding raised, headcount, margins, pricing, market share.
+  "Instabug is profitable", "customers renew at high rates"
+- A fact about a DIFFERENT subject than the claim covers. Citing a claim about
+  what the company sells to support a statement about market size is a wrong
+  citation, even if the market statement happens to be true elsewhere.
+- A named third party, partnership, customer, or product no cited claim mentions.
+
+SUPPORTED (do not flag these):
+- Ordinary paraphrase. "sells observability software" supports "provides
+  observability tooling".
+- ANALYSIS AND INTERPRETATION of a cited fact, however far it reaches, as long
+  as it adds no new checkable fact. A memo exists to interpret; commentary is
+  not fabrication. All of these are supported:
+    "...which gives engineering teams a flexible foundation"
+    "...a segment with clear, recurring demand"
+    "...meaning there is no basis to assess operational capacity"
+    "...positioning the company to capture share as the market matures"
+    "...which is a meaningful gap"
+    "...a large, underpenetrated segment"
+    "...suggests a path to durable, high-value contracts"
+  Each of these is an opinion built on the cited fact. None asserts a new,
+  checkable fact. Do not flag them.
+- General industry reasoning that a reader could evaluate for themselves
+  ("enterprise customers typically carry larger contract values"). This is
+  argument, not a claim about this company.
+- Substantial rewording of the cited claim. Judge the FACT, not the phrasing. A
+  claim that a market "is contested by large cloud vendors" fully supports "a
+  segment that large cloud vendors are actively pursuing" - same fact, different
+  words. Do not flag a sentence for saying the claim's own content differently.
+- Statements about what is unknown, undisclosed, or missing from the evidence.
+  These are statements about the EVIDENCE, not about the company, so they need
+  no claim of their own and it does not matter which claim the sentence cites.
+  "The absence of financial or traction data makes this hard to underwrite" is
+  supported, full stop.
+- Sentences that combine a cited fact with a statement about missing evidence.
+  Judge only the cited-fact part; the missing-evidence part is always fine.
+- Hedged language: "may", "suggests", "could", "appears". Hedging signals
+  interpretation, not assertion of fact.
+
+If you are unsure whether something is a new checkable fact or just
+interpretation, treat it as interpretation and answer supported=true. A separate
+deterministic check already guarantees every sentence carries a citation, so the
+only thing you are here to catch is invented substance. Flagging opinion as
+fabrication would make it impossible to write any memo at all.
+
+Before answering false, check your own reason. If the reason you would give is
+any of the following, the correct answer is supported=TRUE, not false:
+- "this is a statement about the evidence, not about the company"
+- "this is interpretation / opinion / analysis rather than a fact"
+- "the claim covers this but the sentence words it differently"
+- "the sentence is about what is missing or undisclosed"
+- "the sentence cites one claim but also mentions other gaps"
+Observed failure mode: verdicts that correctly identify a sentence as commentary
+or as a statement about missing evidence, and then mark it unsupported anyway.
+The category decides the answer.
+
+For every item, return a verdict with its index, supported true or false, and
+when false a one-sentence reason naming the specific invented fact. Return
+exactly one verdict per item, and no other text.
+
+Items:
+{items}

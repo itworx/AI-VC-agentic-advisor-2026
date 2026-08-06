@@ -50,6 +50,13 @@ class State(TypedDict):
     # evaluator
     evaluator_feedback: str
     evaluator_iterations: int  # incremented by evaluate each turn; capped at 2
+    # "accept" | "rewrite" | "accept_capped" — set by evaluate, read by the
+    # conditional edge router. Deliberately NOT next_action: that one belongs
+    # to the supervisor, and sharing it would corrupt the decision log.
+    evaluator_decision: str
+    # each entry: a Violation model_dump. Kept on state so a rejected memo is
+    # inspectable in the checkpoint afterwards, not just in stdout.
+    evaluator_violations: list[dict]
 
 
 def create_initial_state(company_name: str, company_url: str) -> State:
@@ -82,4 +89,6 @@ def create_initial_state(company_name: str, company_url: str) -> State:
         memo_rendered="",
         evaluator_feedback="",
         evaluator_iterations=0,
+        evaluator_decision="",
+        evaluator_violations=[],
     )

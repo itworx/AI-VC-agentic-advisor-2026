@@ -11,11 +11,34 @@ Task:
 Write three cases: a bull case, a base case, and a bear case.
 
 Requirements:
-- Every sentence containing a factual statement must end with a citation
+- Every sentence that says anything about the company must end with a citation
   marker in the exact form <<N>>, where N is the claim number from the list
   above that supports it (e.g. "Instabug sells mobile app observability
-  software <<3>>."). Pure connective/transition sentences with no factual
-  content of their own don't need a marker.
+  software <<3>>."). This includes sentences with no numbers in them: a claim
+  about what the company does, who it sells to, or how it is positioned needs
+  a marker just as much as a market size does.
+- Exactly two kinds of sentence may go unmarked:
+  1. A statement that information could not be found (e.g. "team size is not
+     publicly disclosed among the claims gathered"). There is no claim to
+     cite for a gap.
+  2. A statement about this memo's own reasoning rather than about the company
+     (e.g. "the bear case rests on what the claims do not tell us").
+  Anything else without a marker will be rejected. If you catch yourself
+  writing an interpretive sentence about the company, cite the claim(s) the
+  interpretation rests on rather than leaving it bare.
+- Concluding and summary sentences count as factual statements whenever they
+  restate a cited fact, and they need markers too - list every claim they
+  draw on (e.g. "Taken together, a verified product in a multi-billion-dollar
+  market is a compelling opportunity <<1>> <<2>> <<3>>."). Citing a claim
+  earlier in the section does not exempt a later sentence that repeats it. In
+  particular, any sentence mentioning a market size, customer count,
+  headcount, revenue figure, or funding event needs a marker every time.
+- Do not state general industry facts, historical patterns, or market wisdom
+  that no claim covers - "open-source tooling historically shortens enterprise
+  sales cycles", "enterprise customers typically renew at higher rates". You
+  have no source for these and they will be rejected. If the argument matters,
+  make it in the same sentence as the cited claim it bears on, so the sentence
+  carries that claim's marker; otherwise leave it out.
 - Never cite a claim number that isn't in the list above.
 - Never state anything not supported by one of the claims. If the claims
   don't cover something relevant, say so explicitly (e.g. "team size is not
@@ -50,3 +73,4 @@ Requirements:
 
 Return structured output with exactly three fields: bull_case, base_case,
 bear_case. Each is the full text of that case, with inline <<N>> markers.
+{feedback}

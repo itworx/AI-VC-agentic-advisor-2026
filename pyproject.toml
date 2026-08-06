@@ -5,3 +5,17 @@ addopts = "--ignore=tests/manual -m 'not network'"
 markers = [
     "network: tests that hit the real internet or paid APIs (deselect with -m 'not network')",
 ]
+filterwarnings = [
+    # google-genai (pulled in by langchain-google-genai, which market_intel and
+    # team_signals use) references typing's _UnionGenericAlias, deprecated in
+    # Python 3.14. It fires at import time, in their code, on every run.
+    #
+    # Silenced by exact message rather than by blanket-ignoring
+    # DeprecationWarning, so our own deprecations and langchain's stay visible -
+    # a bare "ignore::DeprecationWarning" is how a real upgrade warning goes
+    # unnoticed for a year.
+    #
+    # This suppresses a symptom we don't own. It goes away for real if those two
+    # specialists move to OpenRouter, which would drop the dependency entirely.
+    "ignore:'_UnionGenericAlias' is deprecated:DeprecationWarning",
+]
