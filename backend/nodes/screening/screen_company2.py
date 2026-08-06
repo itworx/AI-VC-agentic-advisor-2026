@@ -26,6 +26,8 @@ from langchain_openai import ChatOpenAI
 
 from backend.models.screening2 import ScreeningResult
 from backend.services.fetch_service import fetch_page
+from backend.utils.cost_logger import log_cost
+from backend.utils.token_cost import estimate_cost
 
 load_dotenv()
 
@@ -39,18 +41,20 @@ PROMPT_PATH = _REPO_ROOT / "backend" / "prompts" / "screening" / "screen_company
 # same model tier used for the memo writer or specialists.
 SCREEN_MODEL = "anthropic/claude-haiku-4.5"
 
-# NOTE: .env.example currently defines OPENAI_API_KEY, but this (and
-# test_openrouter.py / test_structured_output.py) read OPENROUTER_API_KEY.
-# Add OPENROUTER_API_KEY=... to your local .env or this silently gets api_key=None.
 MAX_PAGE_TEXT_CHARS = 4000
 
+
 def _default_llm():
+    # include_raw=True so we get {"raw": AIMessage, "parsed": ScreeningResult,
+    # "parsing_error": None} back. The raw AIMessage carries usage_metadata
+    # which we need for cost logging (S-06). Without include_raw the
+    # structured-output wrapper swallows token counts.
     return ChatOpenAI(
         model=SCREEN_MODEL,
         base_url="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
         temperature=0,
-    ).with_structured_output(ScreeningResult)
+    ).with_structured_output(ScreeningResult, include_raw=True)
 
 
 def _render_prompt(thesis: str, company_information: str) -> str:
@@ -64,7 +68,6 @@ def _render_prompt(thesis: str, company_information: str) -> str:
     )
 
 
-# 
 def _build_company_information(
     company_name: str,
     company_url: str,
@@ -123,4 +126,29 @@ def screen_company(
     )
     prompt = _render_prompt(thesis=thesis, company_information=company_information)
 
-    return llm.invoke(prompt)
+    response = llm.invoke(prompt)
+
+    # include_raw=True returns a dict with "raw", "parsed", "parsing_error".
+    # In tests, a fake llm might still return a plain ScreeningResult, so
+    # handle both shapes.
+    if isinstance(response, dict):
+        raw = response.get("raw")
+        parsed = response.get("parsed")
+    else:
+        raw = None
+        parsed = response
+
+    usage = getattr(raw, "usage_metadata", None) or {}
+    input_tokens = usage.get("input_tokens", 0)
+    output_tokens = usage.get("output_tokens", 0)
+
+    if input_tokens or output_tokens:
+        cost = estimate_cost(input_tokens, output_tokens)
+        log_cost(
+            node_name="screening",
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            estimated_cost=cost,
+        )
+
+    return parsed
