@@ -4,7 +4,7 @@ from __future__ import annotations
 import streamlit as st
 
 from frontend.canvas import build_dot
-from frontend.run_state import NODE_ORDER, claims_to_rows
+from frontend.run_state import NODE_ORDER, claims_to_rows, filter_claims_by_confidence
 from frontend.theme import INK, STATUS, SURFACE
 
 _MONO = "font-family:'IBM Plex Mono',monospace;"
@@ -56,6 +56,17 @@ def coverage_chip_html(category: str, covered: bool) -> str:
     )
 
 
+def stat_block_html(label: str, value: str) -> str:
+    return (
+        f'<div style="flex:1;min-width:0">'
+        f'<div style="{_MONO}font-size:10px;letter-spacing:.08em;text-transform:uppercase;'
+        f'color:{INK["muted"]};white-space:nowrap">{label}</div>'
+        f'<div style="{_MONO}font-size:19px;font-weight:600;color:{INK["main"]};'
+        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{value}</div>'
+        f"</div>"
+    )
+
+
 def decision_entry_html(entry: dict, latest: bool) -> str:
     bar = STATUS["running"].dot if latest else SURFACE["border_input"]
     return (
@@ -100,10 +111,14 @@ def render_rail(statuses: dict, meta: dict, metrics: dict) -> None:
                                   active=key in ("running", "waiting")))
     st.markdown("".join(rows), unsafe_allow_html=True)
     st.divider()
-    a, b, c = st.columns(3)
-    a.metric("Iteration", f'{metrics["iteration"]} / 6')
-    b.metric("Claims", metrics["claims"])
-    c.metric("Spend", f'${metrics["spend"]:.3f}')
+    stats = (
+        '<div style="display:flex;gap:16px">'
+        + stat_block_html("Iteration", f'{metrics["iteration"]} / 6')
+        + stat_block_html("Claims", str(metrics["claims"]))
+        + stat_block_html("Spend", f'${metrics["spend"]:.3f}')
+        + "</div>"
+    )
+    st.markdown(stats, unsafe_allow_html=True)
 
 
 def render_canvas(statuses: dict, sublabels: dict, caption: str) -> None:
@@ -137,15 +152,32 @@ def render_evidence(values: dict) -> None:
             f"not_found: {nf}</div>", unsafe_allow_html=True)
 
     with claims_col:
-        claims = values.get("claims", [])
-        st.markdown(f'<div class="vc-label">Claims &amp; evidence · {len(claims)}</div>',
+        claims_all = values.get("claims", [])
+        st.markdown(f'<div class="vc-label">Claims &amp; evidence · {len(claims_all)}</div>',
                     unsafe_allow_html=True)
-        if not claims:
+        filter_choice = st.segmented_control(
+            "Confidence filter",
+            options=["all specialists", "verified only"],
+            default="all specialists",
+            label_visibility="collapsed",
+            key="claims_confidence_filter",
+        )
+        claims = filter_claims_by_confidence(
+            claims_all, filter_choice == "verified only"
+        )
+        if not claims_all:
             st.markdown(
                 f'<div style="border:1px dashed {SURFACE["border"]};border-radius:8px;'
                 f'padding:28px;text-align:center;color:{INK["sub"]}">No claims yet<br>'
                 f'<span style="font-size:12px;color:{INK["faint"]}">Specialists run '
                 f"only after approval — that is the cost gate.</span></div>",
+                unsafe_allow_html=True,
+            )
+        elif not claims:
+            st.markdown(
+                f'<div style="border:1px dashed {SURFACE["border"]};border-radius:8px;'
+                f'padding:28px;text-align:center;color:{INK["sub"]}">'
+                "No verified claims yet</div>",
                 unsafe_allow_html=True,
             )
         else:

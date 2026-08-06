@@ -1,5 +1,6 @@
 from frontend.run_state import (
-    NODE_ORDER, claims_to_rows, derive_node_statuses, parse_spend, run_pill,
+    NODE_ORDER, claims_to_rows, derive_node_statuses,
+    filter_claims_by_confidence, parse_spend, run_pill,
 )
 
 
@@ -74,6 +75,21 @@ def test_claims_to_rows():
         "Specialist": "market_intel", "Conf.": "reported",
         "Source": "https://grandviewresearch.com/apm",
     }]
+
+
+def test_filter_claims_all_specialists_returns_everything():
+    claims = [{"confidence": "verified"}, {"confidence": "reported"}, {"confidence": "inferred"}]
+    assert filter_claims_by_confidence(claims, False) == claims
+
+
+def test_filter_claims_verified_only_keeps_verified():
+    claims = [{"confidence": "verified"}, {"confidence": "reported"}, {"confidence": "inferred"}]
+    assert filter_claims_by_confidence(claims, True) == [{"confidence": "verified"}]
+
+
+def test_filter_claims_verified_only_empty_when_none_verified():
+    claims = [{"confidence": "reported"}, {"confidence": "inferred"}]
+    assert filter_claims_by_confidence(claims, True) == []
 
 
 def test_parse_spend_sums_only_lines_after_start():

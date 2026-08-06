@@ -83,6 +83,13 @@ def claims_to_rows(claims: list[dict]) -> list[dict]:
     ]
 
 
+def filter_claims_by_confidence(claims: list[dict], verified_only: bool) -> list[dict]:
+    """Claims table filter toggle: 'all specialists' vs 'verified only'."""
+    if not verified_only:
+        return claims
+    return [c for c in claims if c.get("confidence") == "verified"]
+
+
 def parse_spend(log_text: str, since_iso: str) -> float:
     """Sum cost=$… from logs/costs.log lines at/after 'since_iso'.
 

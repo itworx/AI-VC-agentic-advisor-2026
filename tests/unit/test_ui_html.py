@@ -1,5 +1,6 @@
 from frontend.ui import (
     coverage_chip_html, decision_entry_html, pill_html, rail_row_html,
+    stat_block_html,
 )
 
 
@@ -25,6 +26,12 @@ def test_coverage_chip_states():
     missing = coverage_chip_html("competitors", covered=False)
     assert "#EAF6F2" in covered and "#0B7259" in covered
     assert "#EAF6F2" not in missing
+
+
+def test_stat_block_shows_label_and_value():
+    html = stat_block_html("Iteration", "4 / 6")
+    assert "Iteration" in html and "4 / 6" in html
+    assert "text-overflow:ellipsis" in html   # long values clip, don't wrap-break layout
 
 
 def test_decision_entry_shows_iteration_and_reason():
